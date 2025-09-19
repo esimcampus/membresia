@@ -1,27 +1,4 @@
 import { v4 as uuid } from 'uuid';
-/**
- *  All Dashboard Routes
- *
- *  Understanding name/value pairs for Dashboard routes
- *
- *  Applicable for main/root/level 1 routes
- *  icon 		: String - It's only for main menu or you can consider 1st level menu item to specify icon name.
- *
- *  Applicable for main/root/level 1 and subitems routes
- * 	id 			: Number - You can use uuid() as value to generate unique ID using uuid library, you can also assign constant unique ID for react dynamic objects.
- *  title 		: String - If menu contains childern use title to provide main menu name.
- *  badge 		: String - (Optional - Default - '') If you specify badge value it will be displayed beside the menu title or menu item.
- * 	badgecolor 	: String - (Optional - Default - 'primary' ) - Used to specify badge background color.
- *
- *  Applicable for subitems / children items routes
- *  name 		: String - If it's menu item in which you are specifiying link, use name ( don't use title for that )
- *  children	: Array - Use to specify submenu items
- *
- *  Used to segrigate menu groups
- *  grouptitle : Boolean - (Optional - Default - false ) If you want to group menu items you can use grouptitle = true,
- *  ( Use title : value to specify group title  e.g. COMPONENTS , DOCUMENTATION that we did here. )
- *
- */
 
 export const DashboardMenu = [
 	{
@@ -30,6 +7,38 @@ export const DashboardMenu = [
 		icon: 'home',
 		link: '/'
 	},
+	{
+		id: uuid(),
+		title: 'Unidad',
+		icon: 'share-2',
+		link: '/pages/unidad'
+	},
+	{
+		id: uuid(),
+		title: 'Miembro',
+		icon: 'user-plus',
+		link: '/pages/miembro'
+	},
+	{
+		id: uuid(),
+		title: 'Lista de Miembros',
+		icon: 'list',
+		link: '/pages/lista-miembros'
+	},
+	{
+		id: uuid(),
+		title: 'Calendario',
+		icon: 'calendar',
+		link: '/pages/calendario'
+	},
+	{
+		id: uuid(),
+		title: 'Login',
+		icon: 'log-in',
+		link: '/authentication/sign-in'
+	},
+	// Los siguientes enlaces están comentados para uso futuro
+	/*
 	{
 		id: uuid(),
 		title: 'LAYOUTS & PAGES',
@@ -46,7 +55,7 @@ export const DashboardMenu = [
 			{ id: uuid(), link: '/pages/pricing', name: 'Pricing'},
 			{ id: uuid(), link: '/404', name: '404 Error' }
 		]
-	},	
+	},
 	{
 		id: uuid(),
 		title: 'Authentication',
@@ -62,12 +71,12 @@ export const DashboardMenu = [
 		title: 'Layouts',
 		icon: 'layout',
 		link: '/layouts/layout-vertical'
-	},	
+	},
 	{
 		id: uuid(),
 		title: 'UI COMPONENTS',
 		grouptitle: true
-	},	
+	},
 	{
 		id: uuid(),
 		title: 'Components',
@@ -98,7 +107,9 @@ export const DashboardMenu = [
 			{ id: uuid(), link: '/components/toasts', name: 'Toasts' },
 			{ id: uuid(), link: '/components/tooltips', name: 'Tooltips' }
 		]
-	},	
+	},
+	*/
+	/*
 	{
 		id: uuid(),
 		title: 'Menu Level',
@@ -131,7 +142,9 @@ export const DashboardMenu = [
 				]
 			}
 		]
-	},	
+	},
+	*/
+	/*
 	{
 		id: uuid(),
 		title: 'Documentation',
@@ -155,6 +168,7 @@ export const DashboardMenu = [
 		icon: 'download',
 		link: 'https://codescandy.gumroad.com/l/dashui-nextjs'
 	}
+	*/
 ];
 
 export default DashboardMenu;

@@ -11,16 +11,16 @@ const ActiveProjects = () => {
             <Col md={12} xs={12}>
                 <Card>
                     <Card.Header className="bg-white  py-4">
-                        <h4 className="mb-0">Active Projects</h4>
+                        <h4 className="mb-0">Unidades</h4>
                     </Card.Header>
                     <Table responsive className="text-nowrap mb-0">
                         <thead className="table-light">
                             <tr>
-                                <th>Project name</th>
-                                <th>Hours</th>
-                                <th>priority</th>
-                                <th>Members</th>
-                                <th>Progress</th>
+                                    <th>Sede</th>
+                                    <th>Miembros</th>
+                                    <th>Participación</th>
+                                    <th>Responsables</th>
+                                    <th>Activos</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -68,7 +68,7 @@ const ActiveProjects = () => {
                         </tbody>
                     </Table>
                     <Card.Footer className="bg-white text-center">
-                        <Link href="#" className="link-primary">View All Projects</Link>
+                        <Link href="#" className="link-primary">Ver más unidades</Link>
                     </Card.Footer>
                 </Card>
             </Col>

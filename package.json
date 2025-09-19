@@ -9,6 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@fullcalendar/core": "^6.1.19",
+    "@fullcalendar/daygrid": "^6.1.19",
+    "@fullcalendar/react": "^6.1.19",
     "@vercel/analytics": "^1.0.0",
     "apexcharts": "^3.37.3",
     "bootstrap": "^5.2.3",

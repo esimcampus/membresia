@@ -48,14 +48,14 @@ const Teams = () => {
     return (
         <Card className="h-100">
             <Card.Header className="bg-white py-4">
-                <h4 className="mb-0">Teams </h4>
+                <h4 className="mb-0">Equipo de Gestión </h4>
             </Card.Header>
             <Table responsive className="text-nowrap">
                 <thead className="table-light">
                     <tr>
-                        <th>Name</th>
-                        <th>Role</th>
-                        <th>Last Activity</th>
+                        <th>Nombre</th>
+                        <th>Rol</th>
+                        <th>Última Actividad</th>
                         <th></th>
                     </tr>
                 </thead>

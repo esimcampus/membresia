@@ -1,12 +1,12 @@
 export const ActiveProjectsData = [
     {
        id:1,
-       projectName : "Dropbox Design System",
-       priority : "Medium",
+       projectName : "Buenos Aires",
+        priority : "Media",
        priorityBadgeBg : 'warning',
        hours: 34,
        progress: 15,
-       brandLogo:'/images/brand/dropbox-logo.svg',
+       brandLogo:'/images/brand/slack-logo.svg',
        brandLogoBg : 'bg-white',
        members:[
         {image:'images/avatar/avatar-1.jpg'},
@@ -16,8 +16,8 @@ export const ActiveProjectsData = [
     },
     {
         id:2,
-        projectName : "Slack Team UI Design",
-        priority : "High",
+        projectName : "Córdoba",
+        priority : "Alta",
         priorityBadgeBg : 'danger',
         hours: 47,
         progress: 35,
@@ -31,12 +31,12 @@ export const ActiveProjectsData = [
      },
      {
         id:3,
-        projectName : "GitHub Satellite",
-        priority : "Low",
+        projectName : "Rosario",
+        priority : "Baja",
         priorityBadgeBg : 'info',
         hours: 120,
         progress: 75,
-        brandLogo:'/images/brand/github-logo.svg',
+        brandLogo:'/images/brand/slack-logo.svg',
         brandLogoBg : 'bg-white',
         members:[
             {image:'images/avatar/avatar-7.jpg'},
@@ -46,12 +46,12 @@ export const ActiveProjectsData = [
      },
      {
         id:4,
-        projectName : "3D Character Modelling",
-        priority : "Medium",
+        projectName : "Mendoza",
+        priority : "Media",
         priorityBadgeBg : 'warning',
         hours: 89,
         progress: 63,
-        brandLogo:'/images/brand/3dsmax-logo.svg',
+        brandLogo:'/images/brand/slack-logo.svg',
         brandLogoBg : 'bg-white',
         members:[
             {image:'images/avatar/avatar-10.jpg'},
@@ -60,14 +60,14 @@ export const ActiveProjectsData = [
         ] 
      },
      {
-        id:3,
-        projectName : "Webapp Design System",
-        priority : "Track",
+        id:5,
+        projectName : "Mar del Plata",
+        priority : "Alta",
         priorityBadgeBg : 'success',
         hours: 108,
         progress: 100,
-        brandLogo:'/images/brand/layers-logo.svg',
-        brandLogoBg : 'bg-primary',
+        brandLogo:'/images/brand/slack-logo.svg',
+        brandLogoBg : 'bg-white',
         members:[
             {image:'images/avatar/avatar-13.jpg'},
             {image:'images/avatar/avatar-14.jpg'},
@@ -75,13 +75,13 @@ export const ActiveProjectsData = [
         ] 
      },
      {
-        id:4,
-        projectName : "Github Event Design",
-        priority : "Low",
+        id:6,
+        projectName : "Salta",
+        priority : "Baja",
         priorityBadgeBg : 'info',
         hours: 120,
         progress: 75,
-        brandLogo:'/images/brand/github-logo.svg',
+        brandLogo:'/images/brand/slack-logo.svg',
         brandLogoBg : 'bg-white',
         members:[
             {image:'images/avatar/avatar-16.jpg'},
