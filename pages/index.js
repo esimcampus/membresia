@@ -53,7 +53,7 @@ const Home = () => {
                     {/* card  */}
                     <Col xl={8} lg={12} md={12} xs={12}>
 
-                        {/* Teams  */}
+                        {/* Teams */}
                         <Teams />
 
                     </Col>
