@@ -75,7 +75,7 @@ const Profile = () => {
       setIsCreatingNewState(false);
       setIsCreatingNewCity(false);
     }
-  }, [selectedCountryId]);
+  }, [selectedCountryId, isCreatingNewState]);
 
   useEffect(() => {
     if (selectedStateId && !isCreatingNewState) {
@@ -84,7 +84,7 @@ const Profile = () => {
       setCityInput('');
       setIsCreatingNewCity(false);
     }
-  }, [selectedStateId]);
+  }, [selectedStateId, isCreatingNewState]);
 
   // Función para capitalizar tipo título
   const toTitleCase = (str) => {

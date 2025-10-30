@@ -1,10 +1,11 @@
 import { Container, Row, Col, Card, Table, Badge, Spinner, Toast, Form } from 'react-bootstrap';
 import { PageHeading } from 'widgets';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { InputGroup, Button } from 'react-bootstrap';
 import { supabase } from 'lib/supabaseClient';
 import Link from 'next/link';
+import Image from 'next/image';
 
 const ListaMiembros = () => {
   const router = useRouter();
@@ -35,23 +36,7 @@ const ListaMiembros = () => {
     return age;
   };
 
-  // Cargar miembros desde Supabase
-  useEffect(() => {
-    if (router.isReady) {
-      // cargar lista principal
-      loadMiembros();
-      // verificar si el usuario logueado es admin
-      checkAdmin();
-      // cargar roles disponibles
-      loadRoles();
-      // cargar info de filial si viene en URL
-      if (id) {
-        loadBranchInfo();
-      }
-    }
-  }, [router.isReady, id]);
-
-    const loadBranchInfo = async () => {
+  const loadBranchInfo = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('branches')
@@ -65,9 +50,9 @@ const ListaMiembros = () => {
     } catch (e) {
       console.error('Error cargando info de filial:', e);
     }
-  };
+  }, [id]);
 
-    const loadMiembros = async () => {
+  const loadMiembros = useCallback(async () => {
     setLoading(true);
     try {
       let query = supabase
@@ -117,7 +102,23 @@ const ListaMiembros = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  // Cargar miembros desde Supabase
+  useEffect(() => {
+    if (router.isReady) {
+      // cargar lista principal
+      loadMiembros();
+      // verificar si el usuario logueado es admin
+      checkAdmin();
+      // cargar roles disponibles
+      loadRoles();
+      // cargar info de filial si viene en URL
+      if (id) {
+        loadBranchInfo();
+      }
+    }
+  }, [router.isReady, id, loadMiembros, loadBranchInfo]);
 
   const checkAdmin = async () => {
     try {
@@ -349,7 +350,7 @@ const ListaMiembros = () => {
                   miembrosFiltrados.map((m) => (
                     <tr key={m.member_id}>
                       <td>
-                        <img
+                        <Image
                           src={m.avatar_url || "/images/avatar/profile.jpg"}
                           alt="avatar"
                           className="rounded-circle border border-2 border-primary"
