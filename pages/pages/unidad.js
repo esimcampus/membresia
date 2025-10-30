@@ -355,12 +355,20 @@ const Profile = () => {
         return;
       }
 
+      // Validar ciudad obligatoria según esquema (annexes.city_id NOT NULL)
+      if (!finalCityId) {
+        alert('Por favor seleccione una ciudad o cree una nueva para el anexo principal');
+        setSaving(false);
+        return;
+      }
+
       // 4. Crear la filial
       const { data: branch, error: branchError } = await supabase
         .from('branches')
         .insert({
           name: formData.branchName,
-          countries: country.name
+          // Guardamos la relación mediante la FK al país
+          country_id: selectedCountryId
         })
         .select()
         .single();
@@ -375,8 +383,7 @@ const Profile = () => {
           name: formData.annexName,
           description: formData.annexDescription,
           address: formData.annexAddress,
-          city_id: finalCityId || null,
-          postal_code: formData.annexPostalCode,
+          city_id: finalCityId,
           phone: formData.annexPhone,
           email: formData.annexEmail,
           is_headquarters: true,
