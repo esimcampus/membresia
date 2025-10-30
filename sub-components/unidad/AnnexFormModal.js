@@ -1,0 +1,616 @@
+// import node module libraries
+import { useState, useEffect } from 'react';
+import { Modal, Form, Button, Row, Col } from 'react-bootstrap';
+import { supabase } from 'lib/supabaseClient';
+
+const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) => {
+  const [saving, setSaving] = useState(false);
+  const [countries, setCountries] = useState([]);
+  const [states, setStates] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [selectedCountryId, setSelectedCountryId] = useState('');
+  const [selectedStateId, setSelectedStateId] = useState('');
+  const [selectedCityId, setSelectedCityId] = useState('');
+  const [stateInput, setStateInput] = useState('');
+  const [cityInput, setCityInput] = useState('');
+  const [isCreatingNewState, setIsCreatingNewState] = useState(false);
+  const [isCreatingNewCity, setIsCreatingNewCity] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    address: '',
+    phone: '',
+    email: '',
+    postal_code: '',
+    is_headquarters: false
+  });
+
+  useEffect(() => {
+    loadCountries();
+  }, []);
+
+  useEffect(() => {
+    if (annexData) {
+      // Modo edición
+      setFormData({
+        name: annexData.name || '',
+        description: annexData.description || '',
+        address: annexData.address || '',
+        phone: annexData.phone || '',
+        email: annexData.email || '',
+        postal_code: annexData.postal_code || '',
+        is_headquarters: annexData.is_headquarters || false
+      });
+      
+      if (annexData.city_id) {
+        setSelectedCityId(annexData.city_id);
+        // Cargar datos de ubicación
+        loadLocationData(annexData.city_id);
+      }
+    } else {
+      // Modo crear - resetear
+      resetForm();
+    }
+  }, [annexData, show]);
+
+  useEffect(() => {
+    if (selectedCountryId) {
+      loadStates(selectedCountryId);
+      setSelectedStateId('');
+      setSelectedCityId('');
+      setCities([]);
+      setStateInput('');
+      setCityInput('');
+      setIsCreatingNewState(false);
+      setIsCreatingNewCity(false);
+    }
+  }, [selectedCountryId]);
+
+  useEffect(() => {
+    if (selectedStateId && !isCreatingNewState) {
+      loadCities(selectedStateId);
+      setSelectedCityId('');
+      setCityInput('');
+      setIsCreatingNewCity(false);
+    }
+  }, [selectedStateId]);
+
+  const loadLocationData = async (cityId) => {
+    try {
+      const { data: city, error: cityError } = await supabase
+        .from('cities')
+        .select('city_id, name, zip_code, state_id, states(state_id, name, country_id)')
+        .eq('city_id', cityId)
+        .single();
+
+      if (cityError) throw cityError;
+
+      if (city && city.states) {
+        setSelectedCountryId(city.states.country_id);
+        await loadStates(city.states.country_id);
+        setSelectedStateId(city.states.state_id);
+        await loadCities(city.states.state_id);
+        setSelectedCityId(city.city_id);
+        
+        if (city.zip_code) {
+          setFormData(prev => ({ ...prev, postal_code: city.zip_code }));
+        }
+      }
+    } catch (e) {
+      console.error('Error cargando datos de ubicación:', e);
+    }
+  };
+
+  const loadCountries = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('countries')
+        .select('country_id, name')
+        .order('name');
+      
+      if (error) throw error;
+      setCountries(data || []);
+    } catch (e) {
+      console.error('Error cargando países:', e);
+    }
+  };
+
+  const loadStates = async (countryId) => {
+    try {
+      const { data, error } = await supabase
+        .from('states')
+        .select('state_id, name')
+        .eq('country_id', countryId)
+        .order('name');
+      
+      if (error) throw error;
+      setStates(data || []);
+    } catch (e) {
+      console.error('Error cargando estados:', e);
+    }
+  };
+
+  const loadCities = async (stateId) => {
+    try {
+      const { data, error } = await supabase
+        .from('cities')
+        .select('city_id, name, zip_code')
+        .eq('state_id', stateId)
+        .order('name');
+      
+      if (error) throw error;
+      setCities(data || []);
+    } catch (e) {
+      console.error('Error cargando ciudades:', e);
+    }
+  };
+
+  const toTitleCase = (str) => {
+    return str
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleCountryChange = (e) => {
+    setSelectedCountryId(e.target.value);
+  };
+
+  const handleStateChange = (e) => {
+    const value = e.target.value;
+    if (value === 'new') {
+      setIsCreatingNewState(true);
+      setSelectedStateId('');
+      setStateInput('');
+    } else {
+      setIsCreatingNewState(false);
+      setSelectedStateId(value);
+      setStateInput('');
+    }
+  };
+
+  const handleStateInputChange = (e) => {
+    const value = e.target.value;
+    if (value === value.toUpperCase() && value.length > 1) {
+      setStateInput(toTitleCase(value));
+    } else {
+      setStateInput(value);
+    }
+  };
+
+  const cancelNewState = () => {
+    setIsCreatingNewState(false);
+    setStateInput('');
+  };
+
+  const handleCityChange = (e) => {
+    const value = e.target.value;
+    if (value === 'new') {
+      setIsCreatingNewCity(true);
+      setSelectedCityId('');
+      setCityInput('');
+      setFormData(prev => ({ ...prev, postal_code: '' }));
+    } else {
+      setIsCreatingNewCity(false);
+      const selectedCity = cities.find(c => c.city_id === value);
+      setSelectedCityId(value);
+      setCityInput('');
+      if (selectedCity && selectedCity.zip_code) {
+        setFormData(prev => ({ ...prev, postal_code: selectedCity.zip_code }));
+      }
+    }
+  };
+
+  const handleCityInputChange = (e) => {
+    const value = e.target.value;
+    if (value === value.toUpperCase() && value.length > 1) {
+      setCityInput(toTitleCase(value));
+    } else {
+      setCityInput(value);
+    }
+  };
+
+  const cancelNewCity = () => {
+    setIsCreatingNewCity(false);
+    setCityInput('');
+  };
+
+  const createState = async (name, countryId) => {
+    try {
+      const formattedName = toTitleCase(name.trim());
+      const { data, error } = await supabase
+        .from('states')
+        .insert({ name: formattedName, country_id: countryId })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      await loadStates(countryId);
+      setSelectedStateId(data.state_id);
+      setIsCreatingNewState(false);
+      setStateInput('');
+      return data.state_id;
+    } catch (e) {
+      console.error('Error creando estado:', e);
+      alert('Error al crear el estado/provincia: ' + e.message);
+      return null;
+    }
+  };
+
+  const createCity = async (name, stateId, zipCode) => {
+    try {
+      const formattedName = toTitleCase(name.trim());
+      const { data, error } = await supabase
+        .from('cities')
+        .insert({ name: formattedName, state_id: stateId, zip_code: zipCode })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      await loadCities(stateId);
+      setSelectedCityId(data.city_id);
+      setIsCreatingNewCity(false);
+      setCityInput('');
+      return data.city_id;
+    } catch (e) {
+      console.error('Error creando ciudad:', e);
+      alert('Error al crear la ciudad: ' + e.message);
+      return null;
+    }
+  };
+
+  const handleSave = async () => {
+    if (!formData.name.trim()) {
+      alert('Por favor ingrese el nombre del anexo');
+      return;
+    }
+
+    if (!selectedCountryId) {
+      alert('Por favor seleccione un país');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Crear estado si es necesario
+      let finalStateId = selectedStateId;
+      if (isCreatingNewState && stateInput.trim()) {
+        finalStateId = await createState(stateInput.trim(), selectedCountryId);
+        if (!finalStateId) {
+          setSaving(false);
+          return;
+        }
+      }
+
+      // Crear ciudad si es necesario
+      let finalCityId = selectedCityId;
+      if (isCreatingNewCity && cityInput.trim() && finalStateId) {
+        if (!formData.postal_code.trim()) {
+          alert('Por favor ingrese el código postal para la nueva ciudad');
+          setSaving(false);
+          return;
+        }
+        finalCityId = await createCity(cityInput.trim(), finalStateId, formData.postal_code.trim());
+        if (!finalCityId) {
+          setSaving(false);
+          return;
+        }
+      }
+
+      const annexPayload = {
+        branch_id: branchId,
+        name: formData.name.trim(),
+        description: formData.description.trim() || null,
+        address: formData.address.trim() || null,
+        city_id: finalCityId || null,
+        phone: formData.phone.trim() || null,
+        email: formData.email.trim() || null,
+        is_headquarters: formData.is_headquarters,
+        is_active: true
+      };
+
+      let result;
+      if (annexData) {
+        // Actualizar
+        result = await supabase
+          .from('annexes')
+          .update(annexPayload)
+          .eq('annex_id', annexData.annex_id);
+      } else {
+        // Crear
+        result = await supabase
+          .from('annexes')
+          .insert(annexPayload);
+      }
+
+      if (result.error) throw result.error;
+
+      alert(annexData ? 'Anexo actualizado correctamente' : 'Anexo creado correctamente');
+      onSave();
+      handleClose();
+    } catch (error) {
+      console.error('Error guardando anexo:', error);
+      alert('Error al guardar el anexo: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      description: '',
+      address: '',
+      phone: '',
+      email: '',
+      postal_code: '',
+      is_headquarters: false
+    });
+    setSelectedCountryId('');
+    setSelectedStateId('');
+    setSelectedCityId('');
+    setStateInput('');
+    setCityInput('');
+    setIsCreatingNewState(false);
+    setIsCreatingNewCity(false);
+  };
+
+  const handleClose = () => {
+    resetForm();
+    onHide();
+  };
+
+  return (
+    <Modal show={show} onHide={handleClose} size="lg">
+      <Modal.Header closeButton>
+        <Modal.Title>{annexData ? 'Editar Anexo' : 'Nuevo Anexo'}</Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        <Form>
+          <Row className="mb-3">
+            <Col md={12}>
+              <Form.Group>
+                <Form.Label>Nombre del Anexo *</Form.Label>
+                <Form.Control
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleInputChange}
+                  placeholder="Ej: Anexo Centro"
+                />
+              </Form.Group>
+            </Col>
+          </Row>
+
+          <Row className="mb-3">
+            <Col md={12}>
+              <Form.Group>
+                <Form.Check
+                  type="checkbox"
+                  name="is_headquarters"
+                  label="Es anexo principal (sede)"
+                  checked={formData.is_headquarters}
+                  onChange={handleInputChange}
+                />
+              </Form.Group>
+            </Col>
+          </Row>
+
+          <Row className="mb-3">
+            <Col md={12}>
+              <Form.Group>
+                <Form.Label>Descripción</Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={3}
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  placeholder="Descripción del anexo..."
+                />
+              </Form.Group>
+            </Col>
+          </Row>
+
+          <Row className="mb-3">
+            <Col md={12}>
+              <Form.Group>
+                <Form.Label>Dirección</Form.Label>
+                <Form.Control
+                  type="text"
+                  name="address"
+                  value={formData.address}
+                  onChange={handleInputChange}
+                  placeholder="Calle y número"
+                />
+              </Form.Group>
+            </Col>
+          </Row>
+
+          <Row className="mb-3">
+            <Col md={12}>
+              <Form.Group>
+                <Form.Label>País *</Form.Label>
+                <Form.Select value={selectedCountryId} onChange={handleCountryChange}>
+                  <option value="">Seleccione un país...</option>
+                  {countries.map(country => (
+                    <option key={country.country_id} value={country.country_id}>
+                      {country.name}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+            </Col>
+          </Row>
+
+          <Row className="mb-3">
+            <Col md={12}>
+              <Form.Group>
+                <Form.Label>Estado/Provincia</Form.Label>
+                {!isCreatingNewState ? (
+                  <Form.Select 
+                    value={selectedStateId} 
+                    onChange={handleStateChange}
+                    disabled={!selectedCountryId}
+                  >
+                    <option value="">Seleccione un estado/provincia...</option>
+                    {states.map(state => (
+                      <option key={state.state_id} value={state.state_id}>
+                        {state.name}
+                      </option>
+                    ))}
+                    <option value="new">+ Crear nuevo estado/provincia</option>
+                  </Form.Select>
+                ) : (
+                  <div className="d-flex gap-2 align-items-center">
+                    <Form.Control
+                      type="text"
+                      value={stateInput}
+                      onChange={handleStateInputChange}
+                      placeholder="Ingrese el nombre del estado/provincia"
+                      autoFocus
+                    />
+                    <i 
+                      className="fe fe-x text-danger cursor-pointer" 
+                      style={{ fontSize: '24px', cursor: 'pointer' }}
+                      onClick={cancelNewState}
+                      title="Cancelar"
+                    />
+                  </div>
+                )}
+                {(!selectedCountryId && !isCreatingNewState) && (
+                  <Form.Text className="text-muted">
+                    Primero seleccione un país
+                  </Form.Text>
+                )}
+              </Form.Group>
+            </Col>
+          </Row>
+
+          <Row className="mb-3">
+            <Col md={12}>
+              <Form.Group>
+                <Form.Label>Ciudad</Form.Label>
+                {!isCreatingNewCity ? (
+                  <Form.Select 
+                    value={selectedCityId} 
+                    onChange={handleCityChange}
+                    disabled={!selectedStateId && !isCreatingNewState}
+                  >
+                    <option value="">Seleccione una ciudad...</option>
+                    {cities.map(city => (
+                      <option key={city.city_id} value={city.city_id}>
+                        {city.name}
+                      </option>
+                    ))}
+                    <option value="new">+ Crear nueva ciudad</option>
+                  </Form.Select>
+                ) : (
+                  <div className="d-flex gap-2 align-items-center">
+                    <Form.Control
+                      type="text"
+                      value={cityInput}
+                      onChange={handleCityInputChange}
+                      placeholder="Ingrese el nombre de la ciudad"
+                      autoFocus
+                    />
+                    <i 
+                      className="fe fe-x text-danger cursor-pointer" 
+                      style={{ fontSize: '24px', cursor: 'pointer' }}
+                      onClick={cancelNewCity}
+                      title="Cancelar"
+                    />
+                  </div>
+                )}
+                {(!selectedStateId && !isCreatingNewState && !isCreatingNewCity) && (
+                  <Form.Text className="text-muted">
+                    Primero seleccione un estado/provincia
+                  </Form.Text>
+                )}
+              </Form.Group>
+            </Col>
+          </Row>
+
+          <Row className="mb-3">
+            <Col md={12}>
+              <Form.Group>
+                <Form.Label>
+                  Código Postal {isCreatingNewCity && <span className="text-danger">*</span>}
+                </Form.Label>
+                <Form.Control
+                  type="text"
+                  name="postal_code"
+                  value={formData.postal_code}
+                  onChange={handleInputChange}
+                  disabled={selectedCityId && !isCreatingNewCity}
+                  placeholder={isCreatingNewCity ? "Ingrese el código postal (obligatorio para nueva ciudad)" : ""}
+                />
+                {selectedCityId && !isCreatingNewCity && (
+                  <Form.Text className="text-muted">
+                    El código postal se obtuvo de la ciudad seleccionada
+                  </Form.Text>
+                )}
+                {isCreatingNewCity && (
+                  <Form.Text className="text-muted">
+                    El código postal es obligatorio para crear una nueva ciudad
+                  </Form.Text>
+                )}
+              </Form.Group>
+            </Col>
+          </Row>
+
+          <Row className="mb-3">
+            <Col md={6}>
+              <Form.Group>
+                <Form.Label>Teléfono</Form.Label>
+                <Form.Control
+                  type="text"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleInputChange}
+                  placeholder="+54 11 1234-5678"
+                />
+              </Form.Group>
+            </Col>
+            <Col md={6}>
+              <Form.Group>
+                <Form.Label>Email</Form.Label>
+                <Form.Control
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  placeholder="anexo@ejemplo.com"
+                />
+              </Form.Group>
+            </Col>
+          </Row>
+        </Form>
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={handleClose}>
+          Cancelar
+        </Button>
+        <Button 
+          variant="primary" 
+          onClick={handleSave}
+          disabled={saving}
+        >
+          {saving ? 'Guardando...' : 'Guardar'}
+        </Button>
+      </Modal.Footer>
+    </Modal>
+  );
+};
+
+export default AnnexFormModal;

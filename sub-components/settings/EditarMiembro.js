@@ -4,7 +4,7 @@ import { Card, Form, Row, Col, Button, Image, Spinner, Toast } from 'react-boots
 import { DropFiles, FormSelect } from 'widgets';
 import { supabase } from 'lib/supabaseClient';
 
-const GeneralMiembro = () => {
+const EditarMiembro = ({ memberId }) => {
   // Estado del formulario
   const [formData, setFormData] = useState({
     first_name: '',
@@ -31,6 +31,7 @@ const GeneralMiembro = () => {
   const [maritalStatusOptions, setMaritalStatusOptions] = useState([]);
   const [memberStatusOptions, setMemberStatusOptions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMember, setLoadingMember] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const topRef = useRef(null);
@@ -41,10 +42,72 @@ const GeneralMiembro = () => {
     setToast({ show: true, message, variant });
   };
 
+  // Función helper para mostrar errores
+  const showError = (message) => {
+    setError(message);
+    showToast(message, 'danger');
+  };
+
+  // Función helper para mostrar éxito
+  const showSuccess = (message) => {
+    setSuccess(message);
+    showToast(message, 'success');
+  };
+
+  // Cargar datos del miembro específico
+  useEffect(() => {
+    if (memberId) {
+      loadMemberData();
+    }
+  }, [memberId]);
+
   // Cargar datos de Supabase al montar el componente
   useEffect(() => {
     loadSupabaseData();
   }, []);
+
+  const loadMemberData = async () => {
+    setLoadingMember(true);
+    try {
+      const { data, error } = await supabase
+        .from('members')
+        .select('*')
+        .eq('member_id', memberId)
+        .single();
+
+      if (error) {
+        showError('Error al cargar los datos del miembro');
+        console.error('Error cargando miembro:', error);
+        return;
+      }
+
+      if (data) {
+        setFormData({
+          first_name: data.first_name || '',
+          last_name: data.last_name || '',
+          national_id: data.national_id || '',
+          nationality_country_id: data.nationality_country_id || '',
+          annex_id: data.annex_id || '',
+          residence_address: data.residence_address || '',
+          phone: data.phone || '',
+          marital_status_id: data.marital_status_id || '',
+          num_children: data.num_children || 0,
+          date_of_birth: data.date_of_birth || '',
+          date_of_baptism: data.date_of_baptism || '',
+          member_status_id: data.member_status_id || '',
+          transfer_date: data.transfer_date || '',
+          death_date: data.death_date || '',
+          notes: data.notes || '',
+          avatar_url: data.avatar_url || '/images/avatar/profile.jpg'
+        });
+      }
+    } catch (err) {
+      console.error('Error cargando miembro:', err);
+      showError('Error al cargar los datos del miembro');
+    } finally {
+      setLoadingMember(false);
+    }
+  };
 
   const loadSupabaseData = async () => {
     try {
@@ -137,18 +200,6 @@ const GeneralMiembro = () => {
     return age;
   };
 
-  // Función helper para mostrar errores
-  const showError = (message) => {
-    setError(message);
-    showToast(message, 'danger');
-  };
-
-  // Función helper para mostrar éxito
-  const showSuccess = (message) => {
-    setSuccess(message);
-    showToast(message, 'success');
-  };
-
   // Validar formulario
   const validateForm = () => {
     if (!formData.first_name.trim()) {
@@ -193,7 +244,7 @@ const GeneralMiembro = () => {
     setLoading(true);
 
     try {
-      // Preparar datos para insertar
+      // Preparar datos para actualizar
       const memberData = {
         first_name: formData.first_name.trim(),
         last_name: formData.last_name.trim(),
@@ -213,46 +264,27 @@ const GeneralMiembro = () => {
         avatar_url: formData.avatar_url || null
       };
 
-      const { data, error: insertError } = await supabase
+      const { data, error: updateError } = await supabase
         .from('members')
-        .insert([memberData])
+        .update(memberData)
+        .eq('member_id', memberId)
         .select();
 
-      if (insertError) {
-        console.error('Error al insertar miembro:', insertError);
+      if (updateError) {
+        console.error('Error al actualizar miembro:', updateError);
         
-        if (insertError.code === '23505') {
+        if (updateError.code === '23505') {
           showError('Ya existe un miembro con ese DNI');
           setLoading(false);
           return;
         }
         
-        showError(insertError.message || 'Error al guardar el miembro');
+        showError(updateError.message || 'Error al actualizar el miembro');
         setLoading(false);
         return;
       }
 
-      showSuccess('¡Miembro creado exitosamente!');
-      
-      // Limpiar formulario
-      setFormData({
-        first_name: '',
-        last_name: '',
-        national_id: '',
-        nationality_country_id: '',
-        annex_id: '',
-        residence_address: '',
-        phone: '',
-        marital_status_id: '',
-        num_children: 0,
-        date_of_birth: '',
-        date_of_baptism: '',
-        member_status_id: '',
-        transfer_date: '',
-        death_date: '',
-        notes: '',
-        avatar_url: '/images/avatar/profile.jpg'
-      });
+      showSuccess('¡Miembro actualizado exitosamente!');
 
       // Hacer scroll hacia el inicio del Card para ver el mensaje de éxito
       if (topRef.current) {
@@ -264,11 +296,82 @@ const GeneralMiembro = () => {
         router.push('/pages/lista-miembros');
       }, 2000);
     } catch (err) {
-      console.error('Error inesperado al guardar miembro:', err);
+      console.error('Error inesperado al actualizar miembro:', err);
       showError('Error inesperado al procesar la solicitud');
       setLoading(false);
     }
   };
+
+  // Manejar eliminación del miembro
+  const handleDelete = async () => {
+    try {
+      // Verificar si posee roles activos o es administrador en system_users
+      const { data: su, error: suErr } = await supabase
+        .from('system_users')
+        .select('is_active, roles(level)')
+        .eq('member_id', memberId)
+        .maybeSingle();
+      if (suErr) {
+        console.error('Error verificando roles activos:', suErr);
+      }
+      if (su?.roles?.level === 1) {
+        showError('No se puede eliminar el miembro porque es Administrador. Cambie su rol primero.');
+        return;
+      }
+      if (su && su.is_active) {
+        showError('No se puede eliminar el miembro porque posee un rol activo. Quite el rol o desactívelo primero.');
+        return;
+      }
+    } catch (e) {
+      console.error('Error al verificar roles activos:', e);
+      showError('No se pudo verificar los roles del usuario');
+      return;
+    }
+
+    const confirmDelete = window.confirm(
+      `¿Está seguro que desea eliminar a ${formData.first_name} ${formData.last_name}?\n\nEsta acción no se puede deshacer.`
+    );
+
+    if (!confirmDelete) return;
+
+    setLoading(true);
+
+    try {
+      const { error: deleteError } = await supabase
+        .from('members')
+        .delete()
+        .eq('member_id', memberId);
+
+      if (deleteError) {
+        console.error('Error al eliminar miembro:', deleteError);
+        showError(deleteError.message || 'Error al eliminar el miembro');
+        setLoading(false);
+        return;
+      }
+
+      showSuccess('¡Miembro eliminado exitosamente!');
+
+      // Redirigir a la lista de miembros luego de 1.5 segundos
+      setTimeout(() => {
+        router.push('/pages/lista-miembros');
+      }, 1500);
+    } catch (err) {
+      console.error('Error inesperado al eliminar miembro:', err);
+      showError('Error inesperado al procesar la solicitud');
+      setLoading(false);
+    }
+  };
+
+  if (loadingMember) {
+    return (
+      <div className="text-center py-5">
+        <Spinner animation="border" role="status">
+          <span className="visually-hidden">Cargando...</span>
+        </Spinner>
+        <p className="mt-3">Cargando datos del miembro...</p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -288,9 +391,9 @@ const GeneralMiembro = () => {
       <Row className="mb-8">
       <Col xl={3} lg={4} md={12} xs={12}>
         <div className="mb-4 mb-lg-0">
-          <h4 className="mb-1">Ficha de Miembro</h4>
+          <h4 className="mb-1">Editar Miembro</h4>
           <p className="mb-0 fs-5 text-muted">
-            Completa la información personal y de membresía.
+            Actualiza la información personal y de membresía.
           </p>
         </div>
       </Col>
@@ -511,24 +614,34 @@ const GeneralMiembro = () => {
                   />
                 </Col>
               </Row>
-              <div className="d-flex gap-2">
-                <Button variant="primary" type="submit" disabled={loading}>
-                  {loading ? (
-                    <>
-                      <Spinner animation="border" size="sm" className="me-2" />
-                      Guardando...
-                    </>
-                  ) : (
-                    'Guardar'
-                  )}
-                </Button>
+              <div className="d-flex justify-content-between align-items-center">
+                <div className="d-flex gap-2">
+                  <Button variant="primary" type="submit" disabled={loading}>
+                    {loading ? (
+                      <>
+                        <Spinner animation="border" size="sm" className="me-2" />
+                        Actualizando...
+                      </>
+                    ) : (
+                      'Actualizar'
+                    )}
+                  </Button>
+                  <Button 
+                    variant="outline-secondary" 
+                    type="button"
+                    onClick={() => router.push('/pages/lista-miembros')}
+                    disabled={loading}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
                 <Button 
-                  variant="outline-secondary" 
+                  variant="danger" 
                   type="button"
-                  onClick={() => router.push('/pages/lista-miembros')}
+                  onClick={handleDelete}
                   disabled={loading}
                 >
-                  Cancelar
+                  Eliminar
                 </Button>
               </div>
             </Form>
@@ -540,4 +653,4 @@ const GeneralMiembro = () => {
   );
 };
 
-export default GeneralMiembro;
+export default EditarMiembro;

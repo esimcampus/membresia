@@ -1,6 +1,6 @@
 // import node module libraries
 import Link from 'next/link';
-import { Fragment } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useMediaQuery } from 'react-responsive';
 import {
     Row,
@@ -19,14 +19,60 @@ import NotificationList from 'data/Notification';
 
 // import hooks
 import useMounted from 'hooks/useMounted';
+import { supabase } from 'lib/supabaseClient';
+import { useRouter } from 'next/router';
 
 const QuickMenu = () => {
-
+    const router = useRouter();
     const hasMounted = useMounted();
+    const [currentUser, setCurrentUser] = useState(null);
     
     const isDesktop = useMediaQuery({
         query: '(min-width: 1224px)'
     })
+
+    useEffect(() => {
+        loadCurrentUser();
+    }, []);
+
+    const loadCurrentUser = async () => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            const { data: systemUser } = await supabase
+                .from('system_users')
+                .select(`
+                    member_id,
+                    members (
+                        member_id,
+                        first_name,
+                        last_name,
+                        avatar_url
+                    )
+                `)
+                .eq('user_id', user.id)
+                .single();
+
+            if (systemUser?.members) {
+                setCurrentUser({
+                    member_id: systemUser.members.member_id,
+                    first_name: systemUser.members.first_name,
+                    last_name: systemUser.members.last_name,
+                    avatar_url: systemUser.members.avatar_url,
+                    email: user.email
+                });
+            }
+        } catch (error) {
+            console.error('Error cargando usuario:', error);
+        }
+    };
+
+    const getInitials = (firstName, lastName) => {
+        const first = firstName?.charAt(0) || '';
+        const last = lastName?.charAt(0) || '';
+        return (first + last).toUpperCase();
+    };
 
     const Notifications = () => {
         return (
@@ -54,7 +100,8 @@ const QuickMenu = () => {
     const QuickMenuDesktop = () => {
         return (
         <ListGroup as="ul" bsPrefix='navbar-nav' className="navbar-right-wrap ms-auto d-flex nav-top-wrap">
-            <Dropdown as="li" className="stopevent">
+            {/* Notificaciones ocultas */}
+            {/* <Dropdown as="li" className="stopevent">
                 <Dropdown.Toggle as="a"
                     bsPrefix=' '
                     id="dropdownNotification"
@@ -84,15 +131,21 @@ const QuickMenu = () => {
                         </div>
                     </Dropdown.Item>
                 </Dropdown.Menu>
-            </Dropdown>
-            <Dropdown as="li" className="ms-2">
+            </Dropdown> */}
+            <Dropdown as="li">
                 <Dropdown.Toggle
                     as="a"
                     bsPrefix=' '
                     className="rounded-circle"
                     id="dropdownUser">
                     <div className="avatar avatar-md avatar-indicators avatar-online">
-                        <Image alt="avatar" src='/images/avatar/avatar-1.jpg' className="rounded-circle" />
+                        {currentUser?.avatar_url ? (
+                            <Image alt="avatar" src={currentUser.avatar_url} className="rounded-circle" />
+                        ) : (
+                            <div className="avatar-initials rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style={{ width: '40px', height: '40px' }}>
+                                {currentUser ? getInitials(currentUser.first_name, currentUser.last_name) : 'U'}
+                            </div>
+                        )}
                     </div>
                 </Dropdown.Toggle>
                 <Dropdown.Menu
@@ -103,25 +156,27 @@ const QuickMenu = () => {
                     >
                     <Dropdown.Item as="div" className="px-4 pb-0 pt-2" bsPrefix=' '>
                             <div className="lh-1 ">
-                                <h5 className="mb-1"> John E. Grainger</h5>
-                                <Link href="#" className="text-inherit fs-6">View my profile</Link>
+                                <h5 className="mb-1">
+                                    {currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Usuario'}
+                                </h5>
+                                <Link href="#" className="text-inherit fs-6">{currentUser?.email || ''}</Link>
                             </div>
                             <div className=" dropdown-divider mt-3 mb-2"></div>
                     </Dropdown.Item>
-                    <Dropdown.Item eventKey="2">
-                        <i className="fe fe-user me-2"></i> Edit Profile
+                    <Dropdown.Item onClick={() => currentUser && router.push(`/pages/editar-miembro?id=${currentUser.member_id}`)}>
+                        <i className="fe fe-user me-2"></i> Editar Perfil
                     </Dropdown.Item>
-                    <Dropdown.Item eventKey="3">
-                        <i className="fe fe-activity me-2"></i> Activity Log
+                    {/* <Dropdown.Item eventKey="3">
+                        <i className="fe fe-activity me-2"></i> Actividad
                     </Dropdown.Item>
                     <Dropdown.Item className="text-primary">
                         <i className="fe fe-star me-2"></i> Go Pro
                     </Dropdown.Item>
                     <Dropdown.Item >
                         <i className="fe fe-settings me-2"></i> Account Settings
-                    </Dropdown.Item>
-                    <Dropdown.Item>
-                        <i className="fe fe-power me-2"></i>Sign Out
+                    </Dropdown.Item> */}
+                    <Dropdown.Item onClick={async () => { await supabase.auth.signOut(); router.replace('/authentication/sign-in'); }}>
+                        <i className="fe fe-power me-2"></i>Cerrar Sesión
                     </Dropdown.Item>
                 </Dropdown.Menu>
             </Dropdown>
@@ -131,7 +186,8 @@ const QuickMenu = () => {
     const QuickMenuMobile = () => {
         return (
         <ListGroup as="ul" bsPrefix='navbar-nav' className="navbar-right-wrap ms-auto d-flex nav-top-wrap">
-            <Dropdown as="li" className="stopevent">
+            {/* Notificaciones ocultas */}
+            {/* <Dropdown as="li" className="stopevent">
                 <Dropdown.Toggle as="a"
                     bsPrefix=' '
                     id="dropdownNotification"
@@ -160,15 +216,21 @@ const QuickMenu = () => {
                         </div>
                     </Dropdown.Item>
                 </Dropdown.Menu>
-            </Dropdown>
-            <Dropdown as="li" className="ms-2">
+            </Dropdown> */}
+            <Dropdown as="li">
                 <Dropdown.Toggle
                     as="a"
                     bsPrefix=' '
                     className="rounded-circle"
                     id="dropdownUser">
                     <div className="avatar avatar-md avatar-indicators avatar-online">
-                        <Image alt="avatar" src='/images/avatar/avatar-1.jpg' className="rounded-circle" />
+                        {currentUser?.avatar_url ? (
+                            <Image alt="avatar" src={currentUser.avatar_url} className="rounded-circle" />
+                        ) : (
+                            <div className="avatar-initials rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style={{ width: '40px', height: '40px' }}>
+                                {currentUser ? getInitials(currentUser.first_name, currentUser.last_name) : 'U'}
+                            </div>
+                        )}
                     </div>
                 </Dropdown.Toggle>
                 <Dropdown.Menu
@@ -178,25 +240,27 @@ const QuickMenu = () => {
                     >
                     <Dropdown.Item as="div" className="px-4 pb-0 pt-2" bsPrefix=' '>
                             <div className="lh-1 ">
-                                <h5 className="mb-1"> John E. Grainger</h5>
-                                <Link href="#" className="text-inherit fs-6">View my profile</Link>
+                                <h5 className="mb-1">
+                                    {currentUser ? `${currentUser.first_name} ${currentUser.last_name}` : 'Usuario'}
+                                </h5>
+                                <Link href="#" className="text-inherit fs-6">{currentUser?.email || ''}</Link>
                             </div>
                             <div className=" dropdown-divider mt-3 mb-2"></div>
                     </Dropdown.Item>
-                    <Dropdown.Item eventKey="2">
-                        <i className="fe fe-user me-2"></i> Edit Profile
+                    <Dropdown.Item onClick={() => currentUser && router.push(`/pages/editar-miembro?id=${currentUser.member_id}`)}>
+                        <i className="fe fe-user me-2"></i> Editar Perfil
                     </Dropdown.Item>
-                    <Dropdown.Item eventKey="3">
-                        <i className="fe fe-activity me-2"></i> Activity Log
+                    {/* <Dropdown.Item eventKey="3">
+                        <i className="fe fe-activity me-2"></i> Actividad
                     </Dropdown.Item>
                     <Dropdown.Item className="text-primary">
                         <i className="fe fe-star me-2"></i> Go Pro
                     </Dropdown.Item>
                     <Dropdown.Item >
                         <i className="fe fe-settings me-2"></i> Account Settings
-                    </Dropdown.Item>
-                    <Dropdown.Item>
-                        <i className="fe fe-power me-2"></i>Sign Out
+                    </Dropdown.Item> */}
+                    <Dropdown.Item onClick={async () => { await supabase.auth.signOut(); router.replace('/authentication/sign-in'); }}>
+                        <i className="fe fe-power me-2"></i>Cerrar Sesión
                     </Dropdown.Item>
                 </Dropdown.Menu>
             </Dropdown>

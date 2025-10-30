@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/router";
 import { Row, Col, Card, Form, Button, Image } from "react-bootstrap";
 import Link from "next/link";
+import { supabase } from "lib/supabaseClient";
 
 // import authlayout to override default layout
 import AuthLayout from "layouts/AuthLayout";
@@ -12,14 +13,20 @@ const SignIn = () => {
   const [error, setError] = useState("");
   const router = useRouter();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Usuario y clave hardcodeados
-    if (username === "admin" && password === "1234") {
-      router.push("/");
-    } else {
-      setError("Usuario o clave incorrectos");
+    setError("");
+    // Usamos email como "username" para Supabase; si prefieres usuario, crea una columna en auth.users metadata
+    const { data, error: authError } = await supabase.auth.signInWithPassword({
+      email: username,
+      password
+    });
+    if (authError) {
+      setError(authError.message || "No se pudo iniciar sesión");
+      return;
     }
+    // Redirige a home tras login
+    router.push("/");
   };
 
   return (
@@ -30,7 +37,7 @@ const SignIn = () => {
             <div className="mb-4">
               <Link href="/">
                 <Image
-                  src="/images/brand/logo/logo-primary.svg"
+                  src="/images/brand/logo/logo.svg"
                   className="mb-2"
                   alt=""
                 />
@@ -39,11 +46,11 @@ const SignIn = () => {
             </div>
             <Form onSubmit={handleSubmit}>
               <Form.Group className="mb-3" controlId="username">
-                <Form.Label>Usuario</Form.Label>
+                <Form.Label>Email</Form.Label>
                 <Form.Control
-                  type="text"
-                  name="username"
-                  placeholder="Usuario"
+                  type="email"
+                  name="email"
+                  placeholder="tucorreo@dominio.com"
                   value={username}
                   onChange={e => setUsername(e.target.value)}
                   required
@@ -72,21 +79,6 @@ const SignIn = () => {
                   <Button variant="primary" type="submit">
                     Ingresar
                   </Button>
-                </div>
-                <div className="d-md-flex justify-content-between mt-4">
-                  <div className="mb-2 mb-md-0">
-                    <Link href="/authentication/sign-up" className="fs-5">
-                      Crear cuenta
-                    </Link>
-                  </div>
-                  <div>
-                    <Link
-                      href="/authentication/forget-password"
-                      className="text-inherit fs-5"
-                    >
-                      ¿Olvidaste tu clave?
-                    </Link>
-                  </div>
                 </div>
               </div>
             </Form>

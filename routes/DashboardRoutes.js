@@ -9,20 +9,14 @@ export const DashboardMenu = [
 	},
 	{
 		id: uuid(),
-		title: 'Unidad',
+		title: 'Unidades',
 		icon: 'share-2',
 		link: '/pages/unidad'
 	},
 	{
 		id: uuid(),
-		title: 'Miembro',
-		icon: 'user-plus',
-		link: '/pages/miembro'
-	},
-	{
-		id: uuid(),
-		title: 'Lista de Miembros',
-		icon: 'list',
+		title: 'Miembros',
+		icon: 'users',
 		link: '/pages/lista-miembros'
 	},
 	{
@@ -33,9 +27,9 @@ export const DashboardMenu = [
 	},
 	{
 		id: uuid(),
-		title: 'Login',
-		icon: 'log-in',
-		link: '/authentication/sign-in'
+		title: 'Documentos',
+		icon: 'folder',
+		link: '/pages/documentos'
 	},
 	// Los siguientes enlaces están comentados para uso futuro
 	/*

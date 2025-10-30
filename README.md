@@ -1,6 +1,20 @@
 # [DashUI Next.js Free Admin Template](https://dashui-free-nextjs-admin-template.vercel.app/)
  Dash UI - Next.js Free admin / dashboard  template created by [Codescandy](https://codescandy.com/) and available on Github
 
+## Configurar Supabase
+
+1. Instala dependencias (ya añadido `@supabase/supabase-js`). Si usas npm:
+	- `npm install`
+2. Crea un proyecto en https://supabase.com, ve a Project Settings > API y copia:
+	- URL del proyecto
+	- anon public key
+3. Crea un archivo `.env.local` en la raíz (basado en `.env.local.example`) y añade:
+	- `NEXT_PUBLIC_SUPABASE_URL=...`
+	- `NEXT_PUBLIC_SUPABASE_ANON_KEY=...`
+4. El cliente está disponible en `lib/supabaseClient.js`.
+5. Para iniciar en local:
+	- `npm run dev`
+
 ![dashui-free-nextjs-admin-template](https://user-images.githubusercontent.com/68774600/231716707-3da30d19-b826-4692-b03a-fed41376d250.jpg)
 
  

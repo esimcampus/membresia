@@ -1,5 +1,7 @@
 // import node module libraries
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/router';
+import { supabase } from 'lib/supabaseClient';
 
 // import sub components
 import NavbarVertical from './navbars/NavbarVertical';
@@ -8,9 +10,33 @@ import { Row, Col } from 'react-bootstrap';
 
 const DefaultDashboardLayout = (props) => {
 	const [showMenu, setShowMenu] = useState(true);
+	const [checked, setChecked] = useState(false);
+	const router = useRouter();
+
+	useEffect(() => {
+		let mounted = true;
+		const checkSession = async () => {
+			const { data } = await supabase.auth.getSession();
+			if (!data?.session) {
+				router.replace('/authentication/sign-in');
+			}
+			if (mounted) setChecked(true);
+		};
+		checkSession();
+		const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+			if (!session) {
+				router.replace('/authentication/sign-in');
+			}
+		});
+		return () => {
+			mounted = false;
+			sub?.subscription?.unsubscribe?.();
+		};
+	}, [router]);
 	const ToggleMenu = () => {
 		return setShowMenu(!showMenu);
 	};	
+	if (!checked) return null;
 	return (		
 		<div id="db-wrapper" className={`${showMenu ? '' : 'toggled'}`}>
 			<div className="navbar-vertical navbar">
