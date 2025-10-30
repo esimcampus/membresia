@@ -1,5 +1,5 @@
 import { Container, Row, Col, Card, Table, Badge, Spinner, Toast, Form, Button, Dropdown } from 'react-bootstrap';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { InputGroup } from 'react-bootstrap';
 import { supabase } from 'lib/supabaseClient';
@@ -83,22 +83,6 @@ const Documentos = () => {
     return icons[type] || { icon: 'fe-file', color: '#757575', bg: '#f5f5f5' };
   };
 
-  // Cargar datos iniciales
-  useEffect(() => {
-    if (router.isReady) {
-      checkUserRole();
-      if (id) {
-        loadBranchInfo();
-      }
-    }
-  }, [router.isReady, id]);
-
-  useEffect(() => {
-    if (userLevel !== null) {
-      loadDocumentos();
-    }
-  }, [userLevel, id]);
-
   const checkUserRole = async () => {
     try {
       const { data: auth } = await supabase.auth.getUser();
@@ -143,7 +127,7 @@ const Documentos = () => {
     }
   };
 
-  const loadBranchInfo = async () => {
+  const loadBranchInfo = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('branches')
@@ -157,9 +141,9 @@ const Documentos = () => {
     } catch (e) {
       console.error('Error cargando info de filial:', e);
     }
-  };
+  }, [id]);
 
-  const loadDocumentos = async () => {
+  const loadDocumentos = useCallback(async () => {
     setLoading(true);
     try {
       let query = supabase
@@ -212,7 +196,23 @@ const Documentos = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, userLevel, userBranches]);
+
+  // Cargar datos iniciales
+  useEffect(() => {
+    if (router.isReady) {
+      checkUserRole();
+      if (id) {
+        loadBranchInfo();
+      }
+    }
+  }, [router.isReady, id, loadBranchInfo]);
+
+  useEffect(() => {
+    if (userLevel !== null) {
+      loadDocumentos();
+    }
+  }, [userLevel, loadDocumentos]);
 
   // Filtrar documentos por búsqueda
   const documentosFiltrados = documentos.filter(doc => {

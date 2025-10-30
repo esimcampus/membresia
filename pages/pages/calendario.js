@@ -1,5 +1,5 @@
 // import node module libraries
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -38,26 +38,74 @@ const Calendario = () => {
     }
   }, [router.isReady, router.query.id]);
 
-  useEffect(() => {
-    loadInitialData();
-    
-    // Configurar vista inicial según tamaño de pantalla
-    const setInitialView = () => {
-      const calendarApi = calendarRef.current?.getApi();
-      if (calendarApi && window.innerWidth < 768) {
-        calendarApi.changeView('listMonth');
-      }
-    };
-    
-    // Esperar un poco para que el calendario se monte
-    setTimeout(setInitialView, 100);
-  }, []);
+  const loadEvents = useCallback(async () => {
+    try {
+      let query = supabase
+        .from('events')
+        .select(`
+          event_id,
+          name,
+          description,
+          event_date,
+          start_time,
+          end_time,
+          branch_id,
+          annex_id,
+          branches (name),
+          annexes (name)
+        `)
+        .eq('is_active', true)
+        .order('event_date')
+        .order('start_time');
 
-  useEffect(() => {
-    loadEvents();
+      // Filtrar por filial si está seleccionada
+      if (selectedBranch) {
+        query = query.eq('branch_id', selectedBranch);
+      }
+
+      const { data, error } = await query;
+
+      if (error) throw error;
+
+      // Transformar datos para FullCalendar
+      const transformedEvents = (data || []).map(event => {
+        const startDateTime = event.start_time 
+          ? `${event.event_date}T${event.start_time}`
+          : event.event_date;
+        
+        const endDateTime = event.end_time 
+          ? `${event.event_date}T${event.end_time}`
+          : null;
+
+        return {
+          id: event.event_id,
+          title: event.name,
+          start: startDateTime,
+          end: endDateTime,
+          backgroundColor: '#3182ce',
+          borderColor: '#3182ce',
+          extendedProps: {
+            description: event.description,
+            branch: event.branches?.name,
+            annex: event.annexes?.name,
+            branch_id: event.branch_id,
+            annex_id: event.annex_id,
+            start_time: event.start_time,
+            end_time: event.end_time,
+            event_date: event.event_date
+          }
+        };
+      });
+
+      console.log('📅 Eventos transformados para FullCalendar:', transformedEvents.length, transformedEvents);
+      setEvents(transformedEvents);
+    } catch (e) {
+      console.error('Error cargando eventos:', e);
+      showToast('Error al cargar los eventos', 'danger');
+    }
   }, [selectedBranch]);
 
-  const loadInitialData = async () => {
+  const loadInitialData = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -145,74 +193,26 @@ const Calendario = () => {
       setLoading(false);
       console.log('✅ loadInitialData completado');
     }
-  };
+  }, [loadEvents]);
 
-  const loadEvents = async () => {
-    try {
-      let query = supabase
-        .from('events')
-        .select(`
-          event_id,
-          name,
-          description,
-          event_date,
-          start_time,
-          end_time,
-          branch_id,
-          annex_id,
-          branches (name),
-          annexes (name)
-        `)
-        .eq('is_active', true)
-        .order('event_date')
-        .order('start_time');
-
-      // Filtrar por filial si está seleccionada
-      if (selectedBranch) {
-        query = query.eq('branch_id', selectedBranch);
+  useEffect(() => {
+    loadInitialData();
+    
+    // Configurar vista inicial según tamaño de pantalla
+    const setInitialView = () => {
+      const calendarApi = calendarRef.current?.getApi();
+      if (calendarApi && window.innerWidth < 768) {
+        calendarApi.changeView('listMonth');
       }
+    };
+    
+    // Esperar un poco para que el calendario se monte
+    setTimeout(setInitialView, 100);
+  }, [loadInitialData]);
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      // Transformar datos para FullCalendar
-      const transformedEvents = (data || []).map(event => {
-        const startDateTime = event.start_time 
-          ? `${event.event_date}T${event.start_time}`
-          : event.event_date;
-        
-        const endDateTime = event.end_time 
-          ? `${event.event_date}T${event.end_time}`
-          : null;
-
-        return {
-          id: event.event_id,
-          title: event.name,
-          start: startDateTime,
-          end: endDateTime,
-          backgroundColor: '#3182ce',
-          borderColor: '#3182ce',
-          extendedProps: {
-            description: event.description,
-            branch: event.branches?.name,
-            annex: event.annexes?.name,
-            branch_id: event.branch_id,
-            annex_id: event.annex_id,
-            start_time: event.start_time,
-            end_time: event.end_time,
-            event_date: event.event_date
-          }
-        };
-      });
-
-      console.log('📅 Eventos transformados para FullCalendar:', transformedEvents.length, transformedEvents);
-      setEvents(transformedEvents);
-    } catch (e) {
-      console.error('Error cargando eventos:', e);
-      showToast('Error al cargar los eventos', 'danger');
-    }
-  };
+  useEffect(() => {
+    loadEvents();
+  }, [loadEvents]);
 
   const handleEventClick = (clickInfo) => {
     const event = clickInfo.event;
