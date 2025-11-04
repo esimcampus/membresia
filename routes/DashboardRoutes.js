@@ -3,13 +3,13 @@ import { v4 as uuid } from 'uuid';
 export const DashboardMenu = [
 	{
 		id: uuid(),
-		title: 'Dashboard',
+		title: 'Inicio',
 		icon: 'home',
 		link: '/'
 	},
 	{
 		id: uuid(),
-		title: 'Unidades',
+		title: 'Filiales',
 		icon: 'share-2',
 		link: '/pages/unidad'
 	},

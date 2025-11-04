@@ -422,8 +422,8 @@ const Profile = () => {
       setShowModal(false);
       router.push(`/pages/unidad?id=${branch.branch_id}`);
     } catch (error) {
-      console.error('Error creando Unidad:', error);
-      alert('Error al crear la Unidad: ' + error.message);
+      console.error('Error creando Filial:', error);
+      alert('Error al crear la Filial: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -451,7 +451,7 @@ const Profile = () => {
   return (
     <Container fluid className="p-6">
       {/* Encabezado de la página */}
-      <PageHeading heading="Resumen de la Unidad"/>
+      <PageHeading heading="Resumen de la Filial"/>
 
       {/* Selector de Filial */}
       <Row className="mb-4">
@@ -462,7 +462,7 @@ const Profile = () => {
             onChange={handleBranchChange}
             disabled={loading}
           >
-            <option value="">Seleccione una unidad...</option>
+            <option value="">Seleccione una filial...</option>
             {branches.map(branch => (
               <option key={branch.branch_id} value={branch.branch_id}>
                 {branch.name}
@@ -476,7 +476,7 @@ const Profile = () => {
             onClick={() => setShowModal(true)}
             className="mt-3 mt-md-0"
           >
-            Nueva Unidad
+            Nueva Filial
           </Button>
         </Col>
       </Row>
@@ -484,15 +484,15 @@ const Profile = () => {
       {/* Modal para crear nueva filial */}
       <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
         <Modal.Header closeButton>
-          <Modal.Title>Crear Nueva Unidad</Modal.Title>
+          <Modal.Title>Crear nueva Filial</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <Form>
-            <h5 className="mb-3">Datos de la Unidad</h5>
+            <h5 className="mb-3">Datos de la Filial</h5>
             <Row className="mb-3">
               <Col md={12}>
                 <Form.Group>
-                  <Form.Label>Nombre de la Unidad *</Form.Label>
+                  <Form.Label>Nombre de la Filial *</Form.Label>
                   <Form.Control
                     type="text"
                     name="branchName"

@@ -223,7 +223,10 @@ const UnidadHeader = () => {
               </Link>
             </li>
             <li className="nav-item">
-              <Link className="nav-link" href="#">
+              <Link 
+                className="nav-link" 
+                href={`/pages/documentos?id=${branch?.branch_id}`}
+              >
                 Documentos
               </Link>
             </li>
