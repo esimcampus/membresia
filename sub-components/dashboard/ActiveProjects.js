@@ -250,7 +250,7 @@ const ActiveProjects = () => {
                         </tbody>
                     </Table>
                     <Card.Footer className="bg-white text-center">
-                        <Link href="/pages/unidad" className="link-primary">Ver más unidades</Link>
+                        <Link href="#" className="link-primary">Ver más unidades</Link>
                     </Card.Footer>
                 </Card>
             </Col>

@@ -154,7 +154,7 @@ const UnidadHeader = () => {
         ></div>
         <div className="bg-white rounded-bottom smooth-shadow-sm ">
           <div className="d-flex align-items-center justify-content-between pt-4 pb-6 px-4">
-            <div className="d-flex align-items-center">
+            <div className="d-flex align-items-center flex-wrap">
               {/* avatar */}
               <div className="avatar-xxl avatar-indicators avatar-online me-2 position-relative d-flex justify-content-end align-items-end mt-n10">
                 <Image
@@ -185,14 +185,25 @@ const UnidadHeader = () => {
                 </h2>
                 <p className="mb-0 d-block">{generateHandle(branch?.name)}</p>
               </div>
+              {/* Mobile-only Edit button centered below the title/handle */}
+              <div className="w-100 d-md-none mt-3">
+                <div className="d-flex justify-content-center">
+                  <Button
+                    variant="outline-primary"
+                    onClick={handleOpenEditModal}
+                  >
+                    Editar
+                  </Button>
+                </div>
+              </div>
             </div>
             <div>
               <Button
                 variant="outline-primary"
-                className="d-none d-md-block"
+                className="d-none d-md-inline-block"
                 onClick={handleOpenEditModal}
               >
-                Editar Sede
+                Editar
               </Button>
             </div>
           </div>
@@ -264,7 +275,7 @@ const UnidadHeader = () => {
             </Form>
           </Modal.Body>
           <Modal.Footer>
-            <Button variant="secondary" onClick={() => setShowEditModal(false)}>
+            <Button variant="outline-secondary" onClick={() => setShowEditModal(false)}>
               Cancelar
             </Button>
             <Button 
@@ -272,7 +283,7 @@ const UnidadHeader = () => {
               onClick={handleSaveBranch}
               disabled={saving}
             >
-              {saving ? 'Guardando...' : 'Guardar Cambios'}
+              {saving ? 'Guardando...' : 'Guardar'}
             </Button>
           </Modal.Footer>
         </Modal>

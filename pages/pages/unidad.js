@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Col, Row, Container, Form, Button, Modal } from 'react-bootstrap';
 import { useRouter } from 'next/router';
 import { supabase } from 'lib/supabaseClient';
+import { toTitleCase } from 'lib/textFormatters';
 
 // import widget as custom components
 import { PageHeading } from 'widgets'
@@ -66,6 +67,7 @@ const Profile = () => {
 
   useEffect(() => {
     if (selectedCountryId) {
+      // Al cambiar de país, limpiamos dependencias y salimos de modos de creación
       loadStates(selectedCountryId);
       setSelectedStateId('');
       setSelectedCityId('');
@@ -75,19 +77,21 @@ const Profile = () => {
       setIsCreatingNewState(false);
       setIsCreatingNewCity(false);
     }
-  }, [selectedCountryId, isCreatingNewState]);
+  }, [selectedCountryId]);
 
   useEffect(() => {
     if (selectedStateId && !isCreatingNewState) {
+      // Al cambiar de estado, cargamos ciudades solamente si NO estamos creando estado nuevo
       loadCities(selectedStateId);
       setSelectedCityId('');
       setCityInput('');
       setIsCreatingNewCity(false);
     }
-  }, [selectedStateId, isCreatingNewState]);
+  }, [selectedStateId]);
 
-  // Función para capitalizar tipo título
-  const toTitleCase = (str) => {
+  // Función local para capitalizar (usada solo en inputs de estado/ciudad)
+  // Nota: para nombres/dirección usamos la versión compartida importada de lib/textFormatters
+  const toTitleCaseLocal = (str) => {
     return str
       .toLowerCase()
       .split(' ')
@@ -165,12 +169,30 @@ const Profile = () => {
     }
   };
 
+  // Campos a forzar Title Case automáticamente
+  const fieldFormatters = {
+    branchName: toTitleCase,
+    annexName: toTitleCase,
+    annexDescription: undefined,
+    annexAddress: toTitleCase,
+    annexPostalCode: undefined,
+    annexPhone: undefined,
+    annexEmail: undefined
+  };
+
+  // Mientras se escribe no formateamos (para no interferir con espacios/cursor)
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Al salir del campo aplicamos Title Case si corresponde
+  const handleInputBlur = (e) => {
+    const { name, value } = e.target;
+    const fmt = fieldFormatters[name];
+    if (typeof fmt === 'function') {
+      setFormData(prev => ({ ...prev, [name]: fmt(value) }));
+    }
   };
 
   const handleCountryChange = (e) => {
@@ -194,7 +216,7 @@ const Profile = () => {
   const handleStateInputChange = (e) => {
     const value = e.target.value;
     if (value === value.toUpperCase() && value.length > 1) {
-      setStateInput(toTitleCase(value));
+      setStateInput(toTitleCaseLocal(value));
     } else {
       setStateInput(value);
     }
@@ -215,7 +237,7 @@ const Profile = () => {
       setFormData(prev => ({ ...prev, annexPostalCode: '' }));
     } else {
       setIsCreatingNewCity(false);
-      const selectedCity = cities.find(c => c.city_id === value);
+      const selectedCity = cities.find(c => String(c.city_id) === String(value));
       setSelectedCityId(value);
       setCityInput('');
       // Actualizar código postal del formulario si la ciudad tiene uno
@@ -228,7 +250,7 @@ const Profile = () => {
   const handleCityInputChange = (e) => {
     const value = e.target.value;
     if (value === value.toUpperCase() && value.length > 1) {
-      setCityInput(toTitleCase(value));
+      setCityInput(toTitleCaseLocal(value));
     } else {
       setCityInput(value);
     }
@@ -242,7 +264,7 @@ const Profile = () => {
   const createCountry = async (name) => {
     try {
       // Aplicar título case al guardar
-      const formattedName = toTitleCase(name.trim());
+  const formattedName = toTitleCaseLocal(name.trim());
       const { data, error } = await supabase
         .from('countries')
         .insert({ name: formattedName })
@@ -263,7 +285,7 @@ const Profile = () => {
   const createState = async (name, countryId) => {
     try {
       // Aplicar título case al guardar
-      const formattedName = toTitleCase(name.trim());
+  const formattedName = toTitleCaseLocal(name.trim());
       const { data, error } = await supabase
         .from('states')
         .insert({ name: formattedName, country_id: countryId })
@@ -286,7 +308,7 @@ const Profile = () => {
   const createCity = async (name, stateId, zipCode) => {
     try {
       // Aplicar título case al guardar
-      const formattedName = toTitleCase(name.trim());
+  const formattedName = toTitleCaseLocal(name.trim());
       const { data, error } = await supabase
         .from('cities')
         .insert({ name: formattedName, state_id: stateId, zip_code: zipCode })
@@ -400,8 +422,8 @@ const Profile = () => {
       setShowModal(false);
       router.push(`/pages/unidad?id=${branch.branch_id}`);
     } catch (error) {
-      console.error('Error creando filial:', error);
-      alert('Error al crear la filial: ' + error.message);
+      console.error('Error creando Unidad:', error);
+      alert('Error al crear la Unidad: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -448,12 +470,13 @@ const Profile = () => {
             ))}
           </Form.Select>
         </Col>
-        <Col md={6} className="d-flex align-items-end">
+        <Col md={6} className="d-flex align-items-end justify-content-center justify-content-md-end">
           <Button 
             variant="primary" 
             onClick={() => setShowModal(true)}
+            className="mt-3 mt-md-0"
           >
-            Nueva Filial
+            Nueva Unidad
           </Button>
         </Col>
       </Row>
@@ -461,21 +484,22 @@ const Profile = () => {
       {/* Modal para crear nueva filial */}
       <Modal show={showModal} onHide={() => setShowModal(false)} size="lg">
         <Modal.Header closeButton>
-          <Modal.Title>Crear Nueva Filial</Modal.Title>
+          <Modal.Title>Crear Nueva Unidad</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <Form>
-            <h5 className="mb-3">Datos de la Filial</h5>
+            <h5 className="mb-3">Datos de la Unidad</h5>
             <Row className="mb-3">
               <Col md={12}>
                 <Form.Group>
-                  <Form.Label>Nombre de la Filial *</Form.Label>
+                  <Form.Label>Nombre de la Unidad *</Form.Label>
                   <Form.Control
                     type="text"
                     name="branchName"
                     value={formData.branchName}
                     onChange={handleInputChange}
-                    placeholder="Ej: Filial Buenos Aires"
+                    onBlur={handleInputBlur}
+                    placeholder="Ej: Buenos Aires"
                   />
                 </Form.Group>
               </Col>
@@ -509,6 +533,7 @@ const Profile = () => {
                     name="annexName"
                     value={formData.annexName}
                     onChange={handleInputChange}
+                    onBlur={handleInputBlur}
                     placeholder="Ej: Sede Central Buenos Aires"
                   />
                 </Form.Group>
@@ -540,6 +565,7 @@ const Profile = () => {
                     name="annexAddress"
                     value={formData.annexAddress}
                     onChange={handleInputChange}
+                    onBlur={handleInputBlur}
                     placeholder="Calle y número"
                   />
                 </Form.Group>
@@ -590,21 +616,7 @@ const Profile = () => {
               </Col>
             </Row>
 
-            {!isCreatingNewState && stateInput && (
-              <Row className="mb-3">
-                <Col md={12}>
-                  <Form.Group>
-                    <Form.Label>Nombre del nuevo estado/provincia</Form.Label>
-                    <Form.Control
-                      type="text"
-                      value={stateInput}
-                      onChange={handleStateInputChange}
-                      placeholder="Ingrese el nombre del estado/provincia"
-                    />
-                  </Form.Group>
-                </Col>
-              </Row>
-            )}
+            {/* Cuando se elige "+ Crear nuevo estado/provincia" el select se transforma en un input de texto arriba */}
 
             <Row className="mb-3">
               <Col md={12}>
@@ -723,7 +735,7 @@ const Profile = () => {
           </Form>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowModal(false)}>
+          <Button variant="outline-secondary" onClick={() => setShowModal(false)}>
             Cancelar
           </Button>
           <Button 
@@ -731,7 +743,7 @@ const Profile = () => {
             onClick={handleCreateBranch}
             disabled={saving}
           >
-            {saving ? 'Guardando...' : 'Crear Filial'}
+            {saving ? 'Guardando...' : 'Guardar'}
           </Button>
         </Modal.Footer>
       </Modal>

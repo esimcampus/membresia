@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { Card, Form, Row, Col, Button, Image, Spinner, Toast } from 'react-bootstrap';
 import { DropFiles, FormSelect } from 'widgets';
+import { toTitleCase } from 'lib/textFormatters';
 import { supabase } from 'lib/supabaseClient';
 
 const GeneralMiembro = () => {
@@ -115,13 +116,26 @@ const GeneralMiembro = () => {
     }
   };
 
-  // Manejar cambios en los campos
+  // Campos de texto a normalizar en Title Case
+  const fieldFormatters = {
+    first_name: toTitleCase,
+    last_name: toTitleCase,
+    residence_address: toTitleCase,
+  };
+
+  // Mientras se escribe: no formateamos para no interferir con el cursor/espacios
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Al salir del campo: aplicamos Title Case
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+    const fmt = fieldFormatters[name];
+    if (typeof fmt === 'function') {
+      setFormData(prev => ({ ...prev, [name]: fmt(value) }));
+    }
   };
 
   // Calcular edad desde fecha de nacimiento
@@ -193,14 +207,14 @@ const GeneralMiembro = () => {
     setLoading(true);
 
     try {
-      // Preparar datos para insertar
+      // Preparar datos para insertar (refuerzo: normalizar también aquí)
       const memberData = {
-        first_name: formData.first_name.trim(),
-        last_name: formData.last_name.trim(),
+        first_name: toTitleCase(formData.first_name.trim()),
+        last_name: toTitleCase(formData.last_name.trim()),
         national_id: formData.national_id.trim(),
         nationality_country_id: formData.nationality_country_id,
         annex_id: formData.annex_id || null,
-        residence_address: formData.residence_address.trim() || null,
+  residence_address: (formData.residence_address ? toTitleCase(formData.residence_address.trim()) : null),
         phone: formData.phone.trim() || null,
         marital_status_id: formData.marital_status_id,
         num_children: parseInt(formData.num_children) || 0,
@@ -342,6 +356,7 @@ const GeneralMiembro = () => {
                     placeholder="Nombre" 
                     value={formData.first_name}
                     onChange={handleChange}
+                    onBlur={handleBlur}
                     required
                   />
                 </Col>
@@ -353,6 +368,7 @@ const GeneralMiembro = () => {
                     placeholder="Apellido" 
                     value={formData.last_name}
                     onChange={handleChange}
+                    onBlur={handleBlur}
                     required
                   />
                 </Col>
@@ -408,6 +424,7 @@ const GeneralMiembro = () => {
                     placeholder="Domicilio" 
                     value={formData.residence_address}
                     onChange={handleChange}
+                    onBlur={handleBlur}
                   />
                 </Col>
               </Row>

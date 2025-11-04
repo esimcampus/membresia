@@ -106,7 +106,7 @@ const UnidadActividad = () => {
           <Card.Body>
             <div className="d-flex justify-content-between align-items-center mb-4">
               <Card.Title as="h4" className="mb-0">
-                Eventos Planificados
+                Eventos
               </Card.Title>
               <Link 
                 href={`/pages/calendario?id=${id}`}

@@ -74,9 +74,12 @@ const NavbarVertical = (props) => {
         className={`nav-link ${
           location.pathname === item.link ? "active" : ""
         }`}
-        onClick={(e) =>
-          isMobile ? props.onClick(!props.showMenu) : props.showMenu
-        }
+        onClick={() => {
+          if (isMobile) {
+            // En mobile, al hacer click en un enlace, siempre ocultamos el menú
+            props.onClick(false);
+          }
+        }}
       >
         {item.name}
         {""}
@@ -100,7 +103,7 @@ const NavbarVertical = (props) => {
     <Fragment>
       <SimpleBar style={{ maxHeight: "100vh" }}>
         <div className="nav-scroller">
-          <Link href="/" className="navbar-brand">
+          <Link href="/" className="navbar-brand" onClick={() => { if (isMobile) props.onClick(false); }}>
             <Image src="/images/brand/logo/logo.svg" alt="" />
           </Link>
         </div>
@@ -309,6 +312,7 @@ const NavbarVertical = (props) => {
                       className={`nav-link ${
                         location.pathname === menu.link ? "active" : ""
                       }`}
+                      onClick={() => { if (isMobile) props.onClick(false); }}
                     >
                       {typeof menu.icon === "string" ? (
                         <i className={`nav-icon fe fe-${menu.icon} me-2`}></i>

@@ -1,6 +1,7 @@
 // import node module libraries
 import { useState, useEffect } from 'react';
 import { Modal, Form, Button, Row, Col } from 'react-bootstrap';
+import { Trash } from 'react-bootstrap-icons';
 import { supabase } from 'lib/supabaseClient';
 
 const EventModal = ({ show, onHide, eventData, branches, userLevel, userBranches, onSave, showToast }) => {
@@ -227,6 +228,33 @@ const EventModal = ({ show, onHide, eventData, branches, userLevel, userBranches
         onHide();
     };
 
+    const handleDelete = async () => {
+        if (!eventData?.event_id) return;
+        const confirmMsg = `¿Seguro que deseas eliminar el evento "${eventData.name || ''}"? Esta acción no se puede deshacer.`;
+        const confirmed = typeof window !== 'undefined' ? window.confirm(confirmMsg) : false;
+        if (!confirmed) return;
+
+        try {
+            setLoading(true);
+            // Borrado lógico: marcar como inactivo
+            const { error } = await supabase
+                .from('events')
+                .update({ is_active: false })
+                .eq('event_id', eventData.event_id);
+
+            if (error) throw error;
+            if (showToast) showToast('Evento eliminado', 'success');
+            onSave();
+            onHide();
+            resetForm();
+        } catch (e) {
+            console.error('Error eliminando evento:', e);
+            if (showToast) showToast('Error al eliminar el evento: ' + e.message, 'danger');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <Modal show={show} onHide={handleClose} size="lg" centered>
             <Modal.Header closeButton>
@@ -356,7 +384,13 @@ const EventModal = ({ show, onHide, eventData, branches, userLevel, userBranches
                 </Form>
             </Modal.Body>
             <Modal.Footer>
-                <Button variant="light" onClick={handleClose} disabled={loading}>
+                {eventData?.event_id && (
+                    <Button variant="outline-danger" className="me-auto" onClick={handleDelete} disabled={loading}>
+                        <Trash className="d-md-none" />
+                        <span className="d-none d-md-inline">Eliminar</span>
+                    </Button>
+                )}
+                <Button variant="outline-secondary" onClick={handleClose} disabled={loading}>
                     Cancelar
                 </Button>
                 <Button variant="primary" onClick={handleSave} disabled={loading}>

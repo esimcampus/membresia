@@ -9,9 +9,27 @@ import NavbarTop from './navbars/NavbarTop';
 import { Row, Col } from 'react-bootstrap';
 
 const DefaultDashboardLayout = (props) => {
-	const [showMenu, setShowMenu] = useState(true);
+	const [showMenu, setShowMenu] = useState(false); // false = estado por defecto (no 'toggled')
 	const [checked, setChecked] = useState(false);
 	const router = useRouter();
+
+	useEffect(() => {
+		// Forzar estado por defecto en montaje y en cambios de tamaño (si cambia el viewport)
+		if (typeof window === 'undefined') return;
+		setShowMenu(false);
+		const onResize = () => setShowMenu(false);
+		window.addEventListener('resize', onResize);
+		return () => window.removeEventListener('resize', onResize);
+	}, []);
+
+	useEffect(() => {
+		// En cualquier cambio de ruta, volver al estado por defecto
+		const handleRoute = () => setShowMenu(false);
+		router.events?.on('routeChangeComplete', handleRoute);
+		return () => {
+			router.events?.off('routeChangeComplete', handleRoute);
+		};
+	}, [router.events]);
 
 	useEffect(() => {
 		let mounted = true;
@@ -33,12 +51,14 @@ const DefaultDashboardLayout = (props) => {
 			sub?.subscription?.unsubscribe?.();
 		};
 	}, [router]);
+	
 	const ToggleMenu = () => {
-		return setShowMenu(!showMenu);
-	};	
+		setShowMenu(prev => !prev);
+	};
+	
 	if (!checked) return null;
 	return (		
-		<div id="db-wrapper" className={`${showMenu ? '' : 'toggled'}`}>
+		<div id="db-wrapper" className={`${showMenu ? 'toggled' : ''}`}>
 			<div className="navbar-vertical navbar">
 				<NavbarVertical
 					showMenu={showMenu}

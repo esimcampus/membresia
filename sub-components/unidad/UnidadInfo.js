@@ -89,14 +89,14 @@ const UnidadInfo = () => {
         <Col xl={6} lg={12} md={12} xs={12} className="mb-6">
             <Card>
                 <Card.Body>
-                    <Card.Title as="h4">Sobre la Sede</Card.Title>
+                    <Card.Title as="h4">Sobre la Unidad</Card.Title>
                     <span className="fw-medium text-dark fs-5 ls-2">Descripción</span>
                     <p className="mt-2 mb-6">
                         {headquarter?.description || 'Sin descripción disponible.'}
                     </p>
                     <Row>
                         <Col xs={12} className="mb-5">
-                            <h6 className="fs-5 ls-2">Nombre de la Sede</h6>
+                            <h6 className="fs-5 ls-2">Nombre</h6>
                             <p className="mb-0">{headquarter?.name || '-'}</p>
                         </Col>
                         <Col xs={6} className="mb-5">

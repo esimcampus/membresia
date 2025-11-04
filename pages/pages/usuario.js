@@ -74,20 +74,27 @@ const UsuarioPage = () => {
     })();
   }, [id]);
 
+  const isAdminCentral = member?.national_id === '99999999';
+
   const handleChange = (e) => {
+    // Bloquear cambios para el administrador central
+    if (isAdminCentral) {
+      showToast('El administrador central no puede ser modificado', 'danger');
+      return;
+    }
     const { name, value, type, checked } = e.target;
     setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
   const handleRoleSelectChange = (e) => {
+    // Bloquear cambios para el administrador central
+    if (isAdminCentral) {
+      showToast('El administrador central no puede ser modificado', 'danger');
+      return;
+    }
     const newRoleId = Number(e.target.value);
     const currentRole = roles.find(r => r.role_id === Number(form.role_id));
     const nextRole = roles.find(r => r.role_id === newRoleId);
-    // Bloquear cambio de rol para administrador principal (DNI 99999999)
-    if (member?.national_id === '99999999' && sysUser && currentRole?.level === 1) {
-      showToast('El administrador principal no puede cambiar de rol', 'danger');
-      return;
-    }
     // Si ya existe usuario del sistema y está pasando de un rol no estándar a estándar, pedir confirmación
     if (sysUser && currentRole?.level !== 4 && nextRole?.level === 4) {
       const ok = window.confirm('Está por quitar el rol del miembro y pasarlo a Miembro Estándar. ¿Desea continuar?');
@@ -102,17 +109,18 @@ const UsuarioPage = () => {
 
   const handleSave = async () => {
     if (!member) return;
+    
+    // Bloquear guardado para el administrador central
+    if (isAdminCentral) {
+      showToast('El administrador central no puede ser modificado', 'danger');
+      return;
+    }
+    
     setSaving(true);
     try {
       const selectedRole = roles.find(r => r.role_id === Number(form.role_id));
       if (!selectedRole) {
         showToast('Debe seleccionar un rol válido', 'danger');
-        setSaving(false);
-        return;
-      }
-      // Bloquear cambio de rol del administrador principal (DNI 99999999)
-      if (sysUser && sysUser.roles?.level === 1 && member?.national_id === '99999999' && selectedRole.level !== 1) {
-        showToast('El administrador principal no puede cambiar de rol', 'danger');
         setSaving(false);
         return;
       }
@@ -290,13 +298,16 @@ const UsuarioPage = () => {
 
   const handleRemoveRole = async () => {
     if (!sysUser) return;
+    
+    // Bloquear para el administrador central
+    if (isAdminCentral) {
+      showToast('El administrador central no puede ser modificado', 'danger');
+      return;
+    }
+    
     const standard = roles.find(r => r.level === 4);
     if (!standard) {
       showToast('No se encontró el rol estándar', 'danger');
-      return;
-    }
-    if (member?.national_id === '99999999' && sysUser.roles?.level === 1) {
-      showToast('El administrador principal no puede cambiar de rol', 'danger');
       return;
     }
     const ok = window.confirm('Está por quitar el rol del miembro y eliminar su usuario del sistema y acceso. ¿Desea continuar?');
@@ -351,126 +362,151 @@ const UsuarioPage = () => {
                 </div>
               </Col>
             </Row>
-            <Row className="mb-3">
-              <Col md={6}>
-                <Form.Label>Email</Form.Label>
-                <Form.Control 
-                  type="email" 
-                  name="email"
-                  placeholder="correo@ejemplo.com"
-                  value={form.email}
-                  onChange={handleChange}
-                />
-              </Col>
-              <Col md={6}>
-                <Form.Label>Rol</Form.Label>
-                <Form.Select name="role_id" value={form.role_id} onChange={handleRoleSelectChange} disabled={member?.national_id === '99999999' && sysUser?.roles?.level === 1}>
-                  {roles.map(r => (
-                    <option key={r.role_id} value={r.role_id}>{r.role_name}</option>
-                  ))}
-                </Form.Select>
-              </Col>
-            </Row>
-            {(!sysUser && roles.find(r => r.role_id === Number(form.role_id))?.level !== 4) && (
-              <Row className="mb-3">
-                <Col md={6}>
-                  <Form.Label>Contraseña</Form.Label>
-                  <InputGroup>
-                    <Form.Control
-                      type={showPwd ? 'text' : 'password'}
-                      name="password"
-                      placeholder="Mínimo 6 caracteres"
-                      value={form.password}
-                      onChange={handleChange}
-                    />
-                    <Button variant="outline-secondary" onClick={() => setShowPwd(v => !v)}>
-                      <i className={`fe fe-${showPwd ? 'eye-off' : 'eye'}`}></i>
-                    </Button>
-                  </InputGroup>
-                </Col>
-                <Col md={6}>
-                  <Form.Label>Repetir Contraseña</Form.Label>
-                  <InputGroup>
-                    <Form.Control
-                      type={showPwd2 ? 'text' : 'password'}
-                      name="password2"
-                      placeholder="Repetir contraseña"
-                      value={form.password2}
-                      onChange={handleChange}
-                    />
-                    <Button variant="outline-secondary" onClick={() => setShowPwd2(v => !v)}>
-                      <i className={`fe fe-${showPwd2 ? 'eye-off' : 'eye'}`}></i>
-                    </Button>
-                  </InputGroup>
-                </Col>
-              </Row>
-            )}
-            {sysUser && sysUser.roles?.level !== 4 && showReset && (
-              <Row className="mb-3">
-                <Col md={6}>
-                  <Form.Label>Nueva contraseña</Form.Label>
-                  <InputGroup>
-                    <Form.Control
-                      type={showResetPwd ? 'text' : 'password'}
-                      placeholder="Mínimo 6 caracteres"
-                      value={resetPwd}
-                      onChange={(e) => setResetPwd(e.target.value)}
-                    />
-                    <Button variant="outline-secondary" onClick={() => setShowResetPwd(v => !v)}>
-                      <i className={`fe fe-${showResetPwd ? 'eye-off' : 'eye'}`}></i>
-                    </Button>
-                  </InputGroup>
-                </Col>
-                <Col md={6}>
-                  <Form.Label>Repetir nueva contraseña</Form.Label>
-                  <InputGroup>
-                    <Form.Control
-                      type={showResetPwd2 ? 'text' : 'password'}
-                      placeholder="Repetir contraseña"
-                      value={resetPwd2}
-                      onChange={(e) => setResetPwd2(e.target.value)}
-                    />
-                    <Button variant="outline-secondary" onClick={() => setShowResetPwd2(v => !v)}>
-                      <i className={`fe fe-${showResetPwd2 ? 'eye-off' : 'eye'}`}></i>
-                    </Button>
-                  </InputGroup>
-                </Col>
-              </Row>
-            )}
-            <Row className="mb-4">
-              <Col md={6}>
-                <Form.Check 
-                  type="switch" 
-                  id="is_active"
-                  name="is_active"
-                  label="Usuario activo"
-                  checked={!!form.is_active}
-                  onChange={handleChange}
-                />
-              </Col>
-            </Row>
-            <div className="d-flex justify-content-between align-items-center">
-              <div className="d-flex gap-2">
-                <Button variant="primary" disabled={saving} onClick={handleSave}>
-                  {saving ? (<><Spinner animation="border" size="sm" className="me-2"/> Guardando...</>) : 'Guardar'}
-                </Button>
-                <Button variant="outline-secondary" onClick={() => router.push('/pages/lista-miembros')} disabled={saving}>
-                  Cancelar
+
+            {isAdminCentral ? (
+              <div className="text-center py-5">
+                <div className="mb-4">
+                  <i className="fe fe-lock" style={{ fontSize: '4rem', color: '#dc3545' }}></i>
+                </div>
+                <h4 className="text-danger mb-3">Administrador Central</h4>
+                <p className="text-muted mb-4">
+                  Este usuario es el administrador central del sistema y no puede ser modificado.
+                </p>
+                <Button variant="outline-secondary" onClick={() => router.push('/pages/lista-miembros')}>
+                  <i className="fe fe-arrow-left me-2"></i>
+                  Volver a la lista
                 </Button>
               </div>
-              <div className="d-flex gap-2 ms-auto">
-                {sysUser && roles.find(r => r.role_id === Number(form.role_id))?.level !== 4 && !showReset && (
-                  <Button variant="warning" onClick={() => setShowReset(true)} disabled={saving}>
-                    <i className="fe fe-key me-1"></i> Nueva Contraseña
-                  </Button>
+            ) : (
+              <>
+                <Row className="mb-3">
+                  <Col md={6}>
+                    <Form.Label>Email</Form.Label>
+                    <Form.Control 
+                      type="email" 
+                      name="email"
+                      placeholder="correo@ejemplo.com"
+                      value={form.email}
+                      onChange={handleChange}
+                    />
+                  </Col>
+                  <Col md={6}>
+                    <Form.Label>Rol</Form.Label>
+                    <Form.Select 
+                      name="role_id" 
+                      value={form.role_id} 
+                      onChange={handleRoleSelectChange}
+                    >
+                      {roles.map(r => (
+                        <option key={r.role_id} value={r.role_id}>{r.role_name}</option>
+                      ))}
+                    </Form.Select>
+                  </Col>
+                </Row>
+                {(!sysUser && roles.find(r => r.role_id === Number(form.role_id))?.level !== 4) && (
+                  <Row className="mb-3">
+                    <Col md={6}>
+                      <Form.Label>Contraseña</Form.Label>
+                      <InputGroup>
+                        <Form.Control
+                          type={showPwd ? 'text' : 'password'}
+                          name="password"
+                          placeholder="Mínimo 6 caracteres"
+                          value={form.password}
+                          onChange={handleChange}
+                        />
+                        <Button variant="outline-secondary" onClick={() => setShowPwd(v => !v)}>
+                          <i className={`fe fe-${showPwd ? 'eye-off' : 'eye'}`}></i>
+                        </Button>
+                      </InputGroup>
+                    </Col>
+                    <Col md={6}>
+                      <Form.Label>Repetir Contraseña</Form.Label>
+                      <InputGroup>
+                        <Form.Control
+                          type={showPwd2 ? 'text' : 'password'}
+                          name="password2"
+                          placeholder="Repetir contraseña"
+                          value={form.password2}
+                          onChange={handleChange}
+                        />
+                        <Button variant="outline-secondary" onClick={() => setShowPwd2(v => !v)}>
+                          <i className={`fe fe-${showPwd2 ? 'eye-off' : 'eye'}`}></i>
+                        </Button>
+                      </InputGroup>
+                    </Col>
+                  </Row>
                 )}
-                {sysUser && roles.find(r => r.role_id === Number(form.role_id))?.level !== 4 && (
-                  <Button variant="outline-danger" onClick={handleRemoveRole} disabled={saving}>
-                    <i className="fe fe-user-x me-1"></i> Quitar rol
-                  </Button>
+                {sysUser && sysUser.roles?.level !== 4 && showReset && (
+                  <Row className="mb-3">
+                    <Col md={6}>
+                      <Form.Label>Nueva contraseña</Form.Label>
+                      <InputGroup>
+                        <Form.Control
+                          type={showResetPwd ? 'text' : 'password'}
+                          placeholder="Mínimo 6 caracteres"
+                          value={resetPwd}
+                          onChange={(e) => setResetPwd(e.target.value)}
+                        />
+                        <Button variant="outline-secondary" onClick={() => setShowResetPwd(v => !v)}>
+                          <i className={`fe fe-${showResetPwd ? 'eye-off' : 'eye'}`}></i>
+                        </Button>
+                      </InputGroup>
+                    </Col>
+                    <Col md={6}>
+                      <Form.Label>Repetir nueva contraseña</Form.Label>
+                      <InputGroup>
+                        <Form.Control
+                          type={showResetPwd2 ? 'text' : 'password'}
+                          placeholder="Repetir contraseña"
+                          value={resetPwd2}
+                          onChange={(e) => setResetPwd2(e.target.value)}
+                        />
+                        <Button variant="outline-secondary" onClick={() => setShowResetPwd2(v => !v)}>
+                          <i className={`fe fe-${showResetPwd2 ? 'eye-off' : 'eye'}`}></i>
+                        </Button>
+                      </InputGroup>
+                    </Col>
+                  </Row>
                 )}
-              </div>
-            </div>
+                <Row className="mb-4">
+                  <Col md={6}>
+                    <Form.Check 
+                      type="switch" 
+                      id="is_active"
+                      name="is_active"
+                      label="Usuario activo"
+                      checked={!!form.is_active}
+                      onChange={handleChange}
+                    />
+                  </Col>
+                </Row>
+                <div className="d-flex flex-column gap-3">
+                  {/* Primera fila: Nueva Contraseña y Quitar rol */}
+                  {sysUser && roles.find(r => r.role_id === Number(form.role_id))?.level !== 4 && (
+                    <div className="d-flex flex-column flex-sm-row gap-2 justify-content-end">
+                      {!showReset && (
+                        <Button variant="warning" onClick={() => setShowReset(true)} disabled={saving}>
+                          <i className="fe fe-key me-1"></i> Nueva Contraseña
+                        </Button>
+                      )}
+                      <Button variant="outline-danger" onClick={handleRemoveRole} disabled={saving}>
+                        <i className="fe fe-user-x me-1"></i> Quitar rol
+                      </Button>
+                    </div>
+                  )}
+                  {/* Segunda fila: Guardar y Cancelar */}
+                  <div className="d-flex flex-column flex-sm-row gap-2">
+                    <Button variant="primary" disabled={saving} onClick={handleSave}>
+                      {saving ? (<><Spinner animation="border" size="sm" className="me-2"/> Guardando...</>) : 'Guardar'}
+                    </Button>
+                    <Button variant="outline-secondary" onClick={() => router.push('/pages/lista-miembros')} disabled={saving}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              </>
+            )}
           </Card.Body>
         </Card>
       </Container>

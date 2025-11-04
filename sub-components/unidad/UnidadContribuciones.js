@@ -145,7 +145,7 @@ avatar_url
                             onClick={handleCreateAnnex}
                             className="d-flex align-items-center gap-1"
                         >
-                            <i className="fe fe-plus"></i> Nuevo Anexo
+                            <i className="fe fe-plus"></i> Nuevo
                         </Button>
                     </div>
                     

@@ -157,10 +157,12 @@ const ListaMiembros = () => {
     }
   };
 
-  const miembrosFiltrados = miembros.filter((m) => {
-    const texto = `${m.first_name} ${m.last_name} ${m.national_id} ${m.annexes?.name || ''} ${m.annexes?.branches?.name || ''}`.toLowerCase();
-    return texto.includes(filtro.toLowerCase());
-  });
+  const miembrosFiltrados = miembros
+    .filter((m) => m.national_id !== '99999999') // Ocultar administrador central
+    .filter((m) => {
+      const texto = `${m.first_name} ${m.last_name} ${m.national_id} ${m.annexes?.name || ''} ${m.annexes?.branches?.name || ''}`.toLowerCase();
+      return texto.includes(filtro.toLowerCase());
+    });
 
   const getStandardRoleId = () => roles.find(r => r.level === 4)?.role_id;
 
@@ -294,8 +296,8 @@ const ListaMiembros = () => {
                 }
               </p>
             </div>
-            <div className="d-flex gap-2 mt-3 mt-md-0 flex-wrap">
-              <Form style={{ minWidth: 260 }}>
+            <div className="d-flex flex-column flex-md-row gap-2 mt-3 mt-md-0 w-100 w-md-auto align-items-center align-items-md-start">
+              <Form style={{ minWidth: 260, width: '100%', maxWidth: '400px' }}>
                 <InputGroup>
                   <Form.Control
                     type="text"
@@ -307,7 +309,7 @@ const ListaMiembros = () => {
                 </InputGroup>
               </Form>
               <Link href="/pages/miembro" passHref legacyBehavior>
-                <Button variant="primary" style={{ whiteSpace: 'nowrap' }}>
+                <Button variant="primary" style={{ whiteSpace: 'nowrap', minWidth: '120px' }}>
                   + Nuevo
                 </Button>
               </Link>
@@ -328,7 +330,7 @@ const ListaMiembros = () => {
               <thead style={{ background: "#e3e7ed" }}>
                 <tr>
                   <th style={{ color: "#2a4365" }}>Avatar</th>
-                  <th style={{ color: "#2a4365" }}>Nombre y Apellido</th>
+                  <th style={{ color: "#2a4365" }}>Nombre</th>
                   <th style={{ color: "#2a4365" }}>DNI</th>
                   <th style={{ color: "#2a4365" }}>Edad</th>
                   <th style={{ color: "#2a4365" }}>Filial</th>

@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { Card, Form, Row, Col, Button, Image, Spinner, Toast } from 'react-bootstrap';
+import { Trash } from 'react-bootstrap-icons';
 import { DropFiles, FormSelect } from 'widgets';
+import { toTitleCase } from 'lib/textFormatters';
 import { supabase } from 'lib/supabaseClient';
 
 const EditarMiembro = ({ memberId }) => {
@@ -179,12 +181,27 @@ const EditarMiembro = ({ memberId }) => {
   };
 
   // Manejar cambios en los campos
+  // Campos de texto a normalizar en Title Case
+  const fieldFormatters = {
+    first_name: toTitleCase,
+    last_name: toTitleCase,
+    residence_address: toTitleCase,
+    notes: undefined
+  };
+
+  // Mientras se escribe: no formateamos para no interferir con el cursor/espacios
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Al salir del campo: aplicamos Title Case
+  const handleBlur = (e) => {
+    const { name, value } = e.target;
+    const fmt = fieldFormatters[name];
+    if (typeof fmt === 'function') {
+      setFormData(prev => ({ ...prev, [name]: fmt(value) }));
+    }
   };
 
   // Calcular edad desde fecha de nacimiento
@@ -244,14 +261,14 @@ const EditarMiembro = ({ memberId }) => {
     setLoading(true);
 
     try {
-      // Preparar datos para actualizar
+      // Preparar datos para actualizar (forzar formato en servidor también)
       const memberData = {
-        first_name: formData.first_name.trim(),
-        last_name: formData.last_name.trim(),
+        first_name: toTitleCase(formData.first_name.trim()),
+        last_name: toTitleCase(formData.last_name.trim()),
         national_id: formData.national_id.trim(),
         nationality_country_id: formData.nationality_country_id,
         annex_id: formData.annex_id || null,
-        residence_address: formData.residence_address.trim() || null,
+  residence_address: (formData.residence_address ? toTitleCase(formData.residence_address.trim()) : null),
         phone: formData.phone.trim() || null,
         marital_status_id: formData.marital_status_id,
         num_children: parseInt(formData.num_children) || 0,
@@ -445,6 +462,7 @@ const EditarMiembro = ({ memberId }) => {
                     placeholder="Nombre" 
                     value={formData.first_name}
                     onChange={handleChange}
+                    onBlur={handleBlur}
                     required
                   />
                 </Col>
@@ -456,30 +474,42 @@ const EditarMiembro = ({ memberId }) => {
                     placeholder="Apellido" 
                     value={formData.last_name}
                     onChange={handleChange}
+                    onBlur={handleBlur}
                     required
                   />
                 </Col>
               </Row>
               <Row className="mb-3">
                 <Col md={6}>
-                  <Form.Label>Filial y Anexo</Form.Label>
-                  <FormSelect
+                  <Form.Label>Anexo</Form.Label>
+                  <Form.Select
                     name="annex_id"
-                    placeholder="Seleccione un anexo"
-                    options={annexes}
-                    defaultselected={formData.annex_id}
+                    value={formData.annex_id}
                     onChange={handleChange}
-                  />
+                  >
+                    <option value="">Seleccione un anexo</option>
+                    {annexes.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Form.Select>
                 </Col>
                 <Col md={6}>
                   <Form.Label>Nacionalidad <span className="text-danger">*</span></Form.Label>
-                  <FormSelect
+                  <Form.Select
                     name="nationality_country_id"
-                    placeholder="Seleccione nacionalidad"
-                    options={countries}
-                    defaultselected={formData.nationality_country_id}
+                    value={formData.nationality_country_id}
                     onChange={handleChange}
-                  />
+                    required
+                  >
+                    <option value="">Seleccione nacionalidad</option>
+                    {countries.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Form.Select>
                 </Col>
               </Row>
               <Row className="mb-3">
@@ -511,6 +541,7 @@ const EditarMiembro = ({ memberId }) => {
                     placeholder="Domicilio" 
                     value={formData.residence_address}
                     onChange={handleChange}
+                    onBlur={handleBlur}
                   />
                 </Col>
               </Row>
@@ -527,13 +558,19 @@ const EditarMiembro = ({ memberId }) => {
                 </Col>
                 <Col md={6}>
                   <Form.Label>Estado Civil <span className="text-danger">*</span></Form.Label>
-                  <FormSelect
+                  <Form.Select
                     name="marital_status_id"
-                    placeholder="Seleccione estado civil"
-                    options={maritalStatusOptions}
-                    defaultselected={formData.marital_status_id}
+                    value={formData.marital_status_id}
                     onChange={handleChange}
-                  />
+                    required
+                  >
+                    <option value="">Seleccione estado civil</option>
+                    {maritalStatusOptions.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Form.Select>
                 </Col>
               </Row>
               <Row className="mb-3">
@@ -572,13 +609,19 @@ const EditarMiembro = ({ memberId }) => {
               <Row className="mb-3">
                 <Col md={6}>
                   <Form.Label>Estado del Miembro <span className="text-danger">*</span></Form.Label>
-                  <FormSelect
+                  <Form.Select
                     name="member_status_id"
-                    placeholder="Seleccione estado"
-                    options={memberStatusOptions}
-                    defaultselected={formData.member_status_id}
+                    value={formData.member_status_id}
                     onChange={handleChange}
-                  />
+                    required
+                  >
+                    <option value="">Seleccione estado</option>
+                    {memberStatusOptions.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </Form.Select>
                 </Col>
               </Row>
               <Row className="mb-3">
@@ -636,12 +679,13 @@ const EditarMiembro = ({ memberId }) => {
                   </Button>
                 </div>
                 <Button 
-                  variant="danger" 
+                  variant="outline-danger" 
                   type="button"
                   onClick={handleDelete}
                   disabled={loading}
                 >
-                  Eliminar
+                  <Trash className="d-md-none" />
+                  <span className="d-none d-md-inline">Eliminar</span>
                 </Button>
               </div>
             </Form>

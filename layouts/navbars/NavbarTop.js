@@ -19,7 +19,10 @@ const NavbarTop = (props) => {
 						href="#"
 						id="nav-toggle"
 						className="nav-icon me-2 icon-xs"
-						onClick={() => props.data.SidebarToggleMenu(!props.data.showMenu)}>
+						onClick={(e) => {
+							e.preventDefault();
+							props.data.SidebarToggleMenu();
+						}}>
 						<Menu size="18px" />
 					</Link>
 					<div className="ms-lg-3 d-none d-md-none d-lg-block">

@@ -1,7 +1,9 @@
-import { Container, Row, Col, Card, Table, Badge, Spinner, Toast, Form, Button, Dropdown } from 'react-bootstrap';
+import { Container, Row, Col, Card, Table, Badge, Spinner, Toast, Form, Button, Modal } from 'react-bootstrap';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { InputGroup } from 'react-bootstrap';
+import { Upload, Download, Trash } from 'react-bootstrap-icons';
+import { useDropzone } from 'react-dropzone';
 import { supabase } from 'lib/supabaseClient';
 import Link from 'next/link';
 
@@ -17,10 +19,60 @@ const Documentos = () => {
   const [userLevel, setUserLevel] = useState(null);
   const [userBranches, setUserBranches] = useState([]);
   const [branchFilter, setBranchFilter] = useState(null);
+  const [downloadingId, setDownloadingId] = useState(null); // Estado para indicar descarga en progreso
+  const [deletingId, setDeletingId] = useState(null); // Estado para indicar eliminación en progreso
+  
+  // Estados para modal de subida
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadFormData, setUploadFormData] = useState({
+    branch_id: '',
+    annex_id: '',
+    description: ''
+  });
+  const [branches, setBranches] = useState([]);
+  const [annexes, setAnnexes] = useState([]);
 
   const showToast = (message, variant = 'info') => {
     setToast({ show: true, message, variant });
   };
+
+  // Configuración de dropzone
+  const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.odt', '.xlsx', '.csv', '.ods', '.jpg', '.jpeg', '.png', '.pptx'];
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: {
+      'application/pdf': ['.pdf'],
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'application/vnd.oasis.opendocument.text': ['.odt'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'text/csv': ['.csv'],
+      'application/vnd.oasis.opendocument.spreadsheet': ['.ods'],
+      'image/jpeg': ['.jpg', '.jpeg'],
+      'image/png': ['.png'],
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
+    },
+    maxSize: MAX_FILE_SIZE,
+    multiple: false,
+    onDrop: (acceptedFiles, rejectedFiles) => {
+      if (rejectedFiles.length > 0) {
+        const rejection = rejectedFiles[0];
+        if (rejection.errors[0]?.code === 'file-too-large') {
+          showToast('El archivo excede el tamaño máximo de 10MB', 'danger');
+        } else if (rejection.errors[0]?.code === 'file-invalid-type') {
+          showToast(`Tipo de archivo no permitido. Permitidos: ${ALLOWED_EXTENSIONS.join(', ')}`, 'danger');
+        } else {
+          showToast('Error al seleccionar archivo', 'danger');
+        }
+        return;
+      }
+      if (acceptedFiles.length > 0) {
+        setUploadFile(acceptedFiles[0]);
+      }
+    },
+  });
 
   // Formatear fecha
   const formatDate = (dateString) => {
@@ -202,11 +254,195 @@ const Documentos = () => {
   useEffect(() => {
     if (router.isReady) {
       checkUserRole();
+      loadBranches();
       if (id) {
         loadBranchInfo();
       }
     }
   }, [router.isReady, id, loadBranchInfo]);
+
+  const loadBranches = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('branches')
+        .select('branch_id, name')
+        .order('name');
+      
+      if (error) throw error;
+      setBranches(data || []);
+    } catch (e) {
+      console.error('Error cargando filiales:', e);
+    }
+  };
+
+  const loadAnnexes = async (branchId) => {
+    if (!branchId) {
+      setAnnexes([]);
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('annexes')
+        .select('annex_id, name, is_headquarters')
+        .eq('branch_id', branchId)
+        .order('name');
+      
+      if (error) throw error;
+      setAnnexes(data || []);
+    } catch (e) {
+      console.error('Error cargando anexos:', e);
+      setAnnexes([]);
+    }
+  };
+
+  const handleOpenUploadModal = () => {
+    setUploadFile(null);
+    setUploadFormData({
+      branch_id: id || '',
+      annex_id: '',
+      description: ''
+    });
+    if (id) {
+      loadAnnexes(id);
+    }
+    setShowUploadModal(true);
+  };
+
+  const handleUploadFormChange = (e) => {
+    const { name, value } = e.target;
+    setUploadFormData(prev => ({ ...prev, [name]: value }));
+    
+    if (name === 'branch_id') {
+      loadAnnexes(value);
+      setUploadFormData(prev => ({ ...prev, annex_id: '' }));
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!uploadFile) {
+      showToast('Por favor selecciona un archivo', 'warning');
+      return;
+    }
+    if (!uploadFormData.branch_id) {
+      showToast('Por favor selecciona una filial', 'warning');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        showToast('Sesión expirada. Por favor inicia sesión nuevamente.', 'danger');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+      formData.append('branchId', uploadFormData.branch_id);
+      if (uploadFormData.annex_id) {
+        formData.append('annexId', uploadFormData.annex_id);
+      }
+      if (uploadFormData.description) {
+        formData.append('description', uploadFormData.description);
+      }
+
+      const response = await fetch('/api/documents/upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Error subiendo documento');
+      }
+
+      showToast('Documento subido exitosamente', 'success');
+      setShowUploadModal(false);
+      loadDocumentos();
+    } catch (error) {
+      console.error('Error:', error);
+      showToast(error.message || 'Error al subir documento', 'danger');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDownload = async (documentId, fileName) => {
+    try {
+      setDownloadingId(documentId); // Marcar como descargando
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        showToast('Sesión expirada. Por favor inicia sesión nuevamente.', 'danger');
+        setDownloadingId(null);
+        return;
+      }
+
+      const response = await fetch(`/api/documents/download?documentId=${documentId}`, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Error descargando documento');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      showToast('Documento descargado exitosamente', 'success');
+    } catch (error) {
+      console.error('Error:', error);
+      showToast(error.message || 'Error al descargar documento', 'danger');
+    } finally {
+      setDownloadingId(null); // Desmarcar descarga
+    }
+  };
+
+  const handleDelete = async (documentId, fileName) => {
+    if (!confirm(`¿Seguro que deseas eliminar "${fileName}"? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+
+    try {
+      setDeletingId(documentId); // Marcar como eliminando
+      
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+
+      const response = await fetch(`/api/documents/delete?documentId=${documentId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error al eliminar documento');
+      }
+
+      showToast('Documento eliminado exitosamente', 'success');
+      loadDocumentos();
+    } catch (error) {
+      console.error('Error:', error);
+      showToast(error.message || 'Error al eliminar documento', 'danger');
+    } finally {
+      setDeletingId(null); // Desmarcar eliminación
+    }
+  };
 
   useEffect(() => {
     if (userLevel !== null) {
@@ -291,8 +527,8 @@ const Documentos = () => {
                   />
                 </InputGroup>
               </Form>
-              <Button variant="primary" style={{ whiteSpace: 'nowrap' }}>
-                <i className="fe fe-upload me-2"></i>
+              <Button variant="primary" style={{ whiteSpace: 'nowrap' }} onClick={handleOpenUploadModal}>
+                <Upload className="me-2" size={16} />
                 Subir Documento
               </Button>
             </div>
@@ -314,8 +550,8 @@ const Documentos = () => {
                   <i className="fe fe-folder" style={{ fontSize: '4rem', opacity: 0.3 }}></i>
                   <p className="mt-3 text-muted">No hay documentos disponibles</p>
                   {!filtro && (
-                    <Button variant="primary" className="mt-2">
-                      <i className="fe fe-upload me-2"></i>
+                    <Button variant="primary" className="mt-2" onClick={handleOpenUploadModal}>
+                      <Upload className="me-2" size={16} />
                       Subir primer documento
                     </Button>
                   )}
@@ -329,7 +565,6 @@ const Documentos = () => {
                         <th className="border-0 py-3">Nombre del Archivo</th>
                         <th className="border-0 py-3">Propietario</th>
                         <th className="border-0 py-3">Filial / Anexo</th>
-                        <th className="border-0 py-3">Tamaño</th>
                         <th className="border-0 py-3">Fecha de Creación</th>
                         <th className="border-0 py-3 text-center">Acciones</th>
                       </tr>
@@ -363,7 +598,26 @@ const Documentos = () => {
                             {/* Nombre del archivo */}
                             <td className="align-middle">
                               <div>
-                                <div className="fw-semibold text-dark">{doc.file_name}</div>
+                                <div 
+                                  className="fw-semibold" 
+                                  style={{ 
+                                    cursor: downloadingId === doc.document_id ? 'wait' : 'pointer',
+                                    color: downloadingId === doc.document_id ? '#6c757d' : '#0d6efd'
+                                  }}
+                                  onClick={() => downloadingId === doc.document_id ? null : handleDownload(doc.document_id, doc.file_name)}
+                                >
+                                  {downloadingId === doc.document_id ? (
+                                    <>
+                                      <Spinner animation="border" size="sm" className="me-2" />
+                                      Descargando...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Download size={14} className="me-1" />
+                                      {doc.file_name}
+                                    </>
+                                  )}
+                                </div>
                                 {doc.description && (
                                   <small className="text-muted">{doc.description}</small>
                                 )}
@@ -401,13 +655,6 @@ const Documentos = () => {
                               </div>
                             </td>
 
-                            {/* Tamaño */}
-                            <td className="align-middle">
-                              <small className="text-muted">
-                                {formatFileSize(doc.file_size)}
-                              </small>
-                            </td>
-
                             {/* Fecha */}
                             <td className="align-middle">
                               <small className="text-muted">
@@ -417,39 +664,19 @@ const Documentos = () => {
 
                             {/* Acciones */}
                             <td className="align-middle text-center">
-                              <Dropdown>
-                                <Dropdown.Toggle 
-                                  variant="light" 
-                                  size="sm" 
-                                  id={`dropdown-${doc.document_id}`}
-                                  className="btn-icon"
+                              {deletingId === doc.document_id ? (
+                                <Spinner animation="border" size="sm" variant="danger" />
+                              ) : (
+                                <Button
+                                  variant="link"
+                                  className="text-danger p-1"
+                                  onClick={() => handleDelete(doc.document_id, doc.file_name)}
+                                  title="Eliminar documento"
+                                  style={{ lineHeight: 1 }}
                                 >
-                                  <i className="fe fe-more-vertical"></i>
-                                </Dropdown.Toggle>
-
-                                <Dropdown.Menu align="end">
-                                  <Dropdown.Item 
-                                    href={doc.file_url} 
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                  >
-                                    <i className="fe fe-eye me-2"></i>
-                                    Ver
-                                  </Dropdown.Item>
-                                  <Dropdown.Item 
-                                    href={doc.file_url} 
-                                    download
-                                  >
-                                    <i className="fe fe-download me-2"></i>
-                                    Descargar
-                                  </Dropdown.Item>
-                                  <Dropdown.Divider />
-                                  <Dropdown.Item className="text-danger">
-                                    <i className="fe fe-trash-2 me-2"></i>
-                                    Eliminar
-                                  </Dropdown.Item>
-                                </Dropdown.Menu>
-                              </Dropdown>
+                                  <Trash size={20} />
+                                </Button>
+                              )}
                             </td>
                           </tr>
                         );
@@ -473,6 +700,141 @@ const Documentos = () => {
             )}
           </Card>
         )}
+
+        {/* Modal de subida de documentos */}
+        <Modal show={showUploadModal} onHide={() => setShowUploadModal(false)} size="lg" centered>
+          <Modal.Header closeButton>
+            <Modal.Title>Subir Documento</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <Form>
+              <Row>
+                <Col md={12} className="mb-3">
+                  {/* Dropzone */}
+                  <div
+                    {...getRootProps()}
+                    style={{
+                      border: '2px dashed #cbd5e0',
+                      borderRadius: '8px',
+                      padding: '40px',
+                      textAlign: 'center',
+                      cursor: 'pointer',
+                      background: isDragActive ? '#f7fafc' : uploadFile ? '#f0fff4' : '#fff',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    <input {...getInputProps()} />
+                    {uploadFile ? (
+                      <div>
+                        <i className="fe fe-check-circle text-success" style={{ fontSize: '3rem' }}></i>
+                        <p className="mt-3 mb-0 fw-semibold">{uploadFile.name}</p>
+                        <small className="text-muted">
+                          {(uploadFile.size / 1024 / 1024).toFixed(2)} MB
+                        </small>
+                        <p className="mt-2 mb-0">
+                          <Button variant="link" size="sm" onClick={(e) => { e.stopPropagation(); setUploadFile(null); }}>
+                            Cambiar archivo
+                          </Button>
+                        </p>
+                      </div>
+                    ) : (
+                      <div>
+                        <Upload size={48} className="text-muted mb-3" />
+                        <p className="mb-2">
+                          {isDragActive ? 'Suelta el archivo aquí' : 'Arrastra un archivo o haz clic para seleccionar'}
+                        </p>
+                        <small className="text-muted">
+                          Formatos permitidos: PDF, DOCX, ODT, XLSX, CSV, ODS, JPG, PNG, PPTX
+                          <br />
+                          Tamaño máximo: 10 MB
+                        </small>
+                      </div>
+                    )}
+                  </div>
+                </Col>
+
+                <Col md={6} className="mb-3">
+                  <Form.Group>
+                    <Form.Label>Filial <span className="text-danger">*</span></Form.Label>
+                    <Form.Select
+                      name="branch_id"
+                      value={uploadFormData.branch_id}
+                      onChange={handleUploadFormChange}
+                      disabled={!!id}
+                    >
+                      <option value="">Seleccionar filial...</option>
+                      {branches.map(branch => (
+                        <option key={branch.branch_id} value={branch.branch_id}>
+                          {branch.name}
+                        </option>
+                      ))}
+                    </Form.Select>
+                    {id && (
+                      <Form.Text className="text-muted">
+                        Filial pre-seleccionada desde el filtro actual
+                      </Form.Text>
+                    )}
+                  </Form.Group>
+                </Col>
+
+                <Col md={6} className="mb-3">
+                  <Form.Group>
+                    <Form.Label>Anexo (Opcional)</Form.Label>
+                    <Form.Select
+                      name="annex_id"
+                      value={uploadFormData.annex_id}
+                      onChange={handleUploadFormChange}
+                      disabled={!uploadFormData.branch_id}
+                    >
+                      <option value="">Todo el branch</option>
+                      {annexes.map(annex => (
+                        <option key={annex.annex_id} value={annex.annex_id}>
+                          {annex.name} {annex.is_headquarters ? '(Sede Principal)' : ''}
+                        </option>
+                      ))}
+                    </Form.Select>
+                    <Form.Text className="text-muted">
+                      Si no seleccionas anexo, el documento será visible para toda la filial
+                    </Form.Text>
+                  </Form.Group>
+                </Col>
+
+                <Col md={12} className="mb-3">
+                  <Form.Group>
+                    <Form.Label>Descripción (Opcional)</Form.Label>
+                    <Form.Control
+                      as="textarea"
+                      rows={3}
+                      name="description"
+                      value={uploadFormData.description}
+                      onChange={handleUploadFormChange}
+                      placeholder="Descripción breve del documento..."
+                      maxLength={500}
+                    />
+                  </Form.Group>
+                </Col>
+              </Row>
+            </Form>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="outline-secondary" onClick={() => setShowUploadModal(false)} disabled={uploading}>
+              Cancelar
+            </Button>
+            <Button variant="primary" onClick={handleUpload} disabled={uploading || !uploadFile}>
+              {uploading ? (
+                <>
+                  <Spinner animation="border" size="sm" className="me-2" />
+                  Subiendo...
+                </>
+              ) : (
+                <>
+                  <Upload size={16} className="me-2" />
+                  Subir Documento
+                </>
+              )}
+            </Button>
+          </Modal.Footer>
+        </Modal>
       </Container>
     </>
   );

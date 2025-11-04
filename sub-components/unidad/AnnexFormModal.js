@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Modal, Form, Button, Row, Col } from 'react-bootstrap';
 import { supabase } from 'lib/supabaseClient';
+import { toTitleCase as toTitleCaseES } from 'lib/textFormatters';
 
 const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) => {
   const [saving, setSaving] = useState(false);
@@ -9,6 +10,7 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
   const [states, setStates] = useState([]);
   const [cities, setCities] = useState([]);
   const [selectedCountryId, setSelectedCountryId] = useState('');
+  const [countryName, setCountryName] = useState('');
   const [selectedStateId, setSelectedStateId] = useState('');
   const [selectedCityId, setSelectedCityId] = useState('');
   const [stateInput, setStateInput] = useState('');
@@ -29,6 +31,27 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
   useEffect(() => {
     loadCountries();
   }, []);
+
+  // Cargar país de la filial (branch) y fijarlo como no editable
+  useEffect(() => {
+    const loadBranchCountry = async () => {
+      if (!branchId) return;
+      try {
+        const { data, error } = await supabase
+          .from('branches')
+          .select('country_id, countries(name)')
+          .eq('branch_id', branchId)
+          .single();
+        if (!error && data) {
+          setSelectedCountryId(data.country_id);
+          setCountryName(data?.countries?.name || '');
+        }
+      } catch (e) {
+        console.error('Error obteniendo país de la filial:', e);
+      }
+    };
+    loadBranchCountry();
+  }, [branchId]);
 
   useEffect(() => {
     if (annexData) {
@@ -162,9 +185,16 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
     }));
   };
 
-  const handleCountryChange = (e) => {
-    setSelectedCountryId(e.target.value);
+  // Formateo Title Case al salir del campo, sin interferir con la escritura
+  const handleInputBlur = (e) => {
+    const { name, value } = e.target;
+    if (name === 'name' || name === 'address') {
+      setFormData(prev => ({ ...prev, [name]: toTitleCaseES(value) }));
+    }
   };
+
+  // País fijo por filial: no permitimos cambiarlo
+  const handleCountryChange = () => {};
 
   const handleStateChange = (e) => {
     const value = e.target.value;
@@ -202,7 +232,7 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
       setFormData(prev => ({ ...prev, postal_code: '' }));
     } else {
       setIsCreatingNewCity(false);
-      const selectedCity = cities.find(c => c.city_id === value);
+      const selectedCity = cities.find(c => String(c.city_id) === String(value));
       setSelectedCityId(value);
       setCityInput('');
       if (selectedCity && selectedCity.zip_code) {
@@ -309,9 +339,9 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
 
       const annexPayload = {
         branch_id: branchId,
-        name: formData.name.trim(),
+  name: toTitleCaseES(formData.name.trim()),
         description: formData.description.trim() || null,
-        address: formData.address.trim() || null,
+  address: (formData.address ? toTitleCaseES(formData.address.trim()) : null),
         city_id: finalCityId || null,
         phone: formData.phone.trim() || null,
         email: formData.email.trim() || null,
@@ -346,7 +376,7 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
     }
   };
 
-  const resetForm = () => {
+  const resetForm = (preserveCountry = true) => {
     setFormData({
       name: '',
       description: '',
@@ -356,7 +386,10 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
       postal_code: '',
       is_headquarters: false
     });
-    setSelectedCountryId('');
+    if (!preserveCountry) {
+      setSelectedCountryId('');
+      setCountryName('');
+    }
     setSelectedStateId('');
     setSelectedCityId('');
     setStateInput('');
@@ -366,7 +399,8 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
   };
 
   const handleClose = () => {
-    resetForm();
+    // Al cerrar, limpiamos todo, incluido país, para evitar valores antiguos al reabrir
+    resetForm(false);
     onHide();
   };
 
@@ -386,6 +420,7 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
+                  onBlur={handleInputBlur}
                   placeholder="Ej: Anexo Centro"
                 />
               </Form.Group>
@@ -431,6 +466,7 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
                   name="address"
                   value={formData.address}
                   onChange={handleInputChange}
+                  onBlur={handleInputBlur}
                   placeholder="Calle y número"
                 />
               </Form.Group>
@@ -441,14 +477,12 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
             <Col md={12}>
               <Form.Group>
                 <Form.Label>País *</Form.Label>
-                <Form.Select value={selectedCountryId} onChange={handleCountryChange}>
-                  <option value="">Seleccione un país...</option>
-                  {countries.map(country => (
-                    <option key={country.country_id} value={country.country_id}>
-                      {country.name}
-                    </option>
-                  ))}
-                </Form.Select>
+                <Form.Control
+                  type="text"
+                  value={countryName || (countries.find(c => c.country_id === selectedCountryId)?.name) || 'Cargando país…'}
+                  readOnly
+                  plaintext
+                />
               </Form.Group>
             </Col>
           </Row>
@@ -598,7 +632,7 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
         </Form>
       </Modal.Body>
       <Modal.Footer>
-        <Button variant="secondary" onClick={handleClose}>
+        <Button variant="outline-secondary" onClick={handleClose}>
           Cancelar
         </Button>
         <Button 
