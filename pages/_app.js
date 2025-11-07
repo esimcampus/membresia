@@ -10,6 +10,7 @@ import 'styles/theme.scss';
 
 // import default layouts
 import DefaultDashboardLayout from 'layouts/DefaultDashboardLayout';
+import { ActiveBranchProvider } from 'context/ActiveBranchContext';
 
 function MyApp({ Component, pageProps }) {
   const router = useRouter();
@@ -41,10 +42,12 @@ function MyApp({ Component, pageProps }) {
           site_name: process.env.siteName
         }}
       />
-        <Layout>
-          <Component {...pageProps} />
-          <Analytics />
-        </Layout>
+        <ActiveBranchProvider>
+          <Layout>
+            <Component {...pageProps} />
+            <Analytics />
+          </Layout>
+        </ActiveBranchProvider>
     </SSRProvider>
   )
 }

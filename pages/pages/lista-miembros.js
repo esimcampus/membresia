@@ -1,15 +1,18 @@
-import { Container, Row, Col, Card, Table, Badge, Spinner, Toast, Form } from 'react-bootstrap';
+import { Container, Row, Col, Card, Table, Badge, Spinner, Toast, Form, Pagination } from 'react-bootstrap';
 import { PageHeading } from 'widgets';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { InputGroup, Button } from 'react-bootstrap';
 import { supabase } from 'lib/supabaseClient';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useActiveBranch } from 'context/ActiveBranchContext';
 
 const ListaMiembros = () => {
   const router = useRouter();
   const { id } = router.query; // ID de la filial desde URL
+  const { activeBranchId, clearActiveBranch } = useActiveBranch();
+  const effectiveId = useMemo(() => id || activeBranchId || null, [id, activeBranchId]);
   const [filtro, setFiltro] = useState("");
   const [miembros, setMiembros] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +21,8 @@ const ListaMiembros = () => {
   const [roles, setRoles] = useState([]);
   const [savingMap, setSavingMap] = useState({}); // { [member_id]: boolean }
   const [branchFilter, setBranchFilter] = useState(null); // Info de la filial filtrada
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 50;
 
   const showToast = (message, variant = 'info') => {
     setToast({ show: true, message, variant });
@@ -36,12 +41,12 @@ const ListaMiembros = () => {
     return age;
   };
 
-  const loadBranchInfo = useCallback(async () => {
+  const loadBranchInfo = useCallback(async (branchId) => {
     try {
       const { data, error } = await supabase
         .from('branches')
         .select('branch_id, name')
-        .eq('branch_id', id)
+        .eq('branch_id', branchId)
         .single();
       
       if (error) throw error;
@@ -50,7 +55,7 @@ const ListaMiembros = () => {
     } catch (e) {
       console.error('Error cargando info de filial:', e);
     }
-  }, [id]);
+  }, []);
 
   const loadMiembros = useCallback(async () => {
     setLoading(true);
@@ -85,14 +90,14 @@ const ListaMiembros = () => {
         return;
       }
 
-      // Filtrar por filial si viene el parámetro id
+      // Filtrar por filial si viene el parámetro id o contexto
       let filteredData = data || [];
       if (id) {
-        console.log('🔍 Filtrando miembros por filial:', id);
-        filteredData = filteredData.filter(member => 
-          member.annexes?.branches?.branch_id === id
-        );
-        console.log('✅ Miembros filtrados:', filteredData.length);
+        console.log('🔍 Filtrando miembros por filial (URL):', id);
+        filteredData = filteredData.filter(member => member.annexes?.branches?.branch_id === id);
+      } else if (activeBranchId) {
+        console.log('🔍 Filtrando miembros por filial (contexto):', activeBranchId);
+        filteredData = filteredData.filter(member => member.annexes?.branches?.branch_id === activeBranchId);
       }
 
       setMiembros(filteredData);
@@ -102,23 +107,26 @@ const ListaMiembros = () => {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, activeBranchId]);
 
   // Cargar miembros desde Supabase
   useEffect(() => {
     if (router.isReady) {
-      // cargar lista principal
       loadMiembros();
-      // verificar si el usuario logueado es admin
       checkAdmin();
-      // cargar roles disponibles
       loadRoles();
-      // cargar info de filial si viene en URL
-      if (id) {
-        loadBranchInfo();
+      if (effectiveId) {
+        loadBranchInfo(effectiveId);
+      } else {
+        setBranchFilter(null);
       }
     }
-  }, [router.isReady, id, loadMiembros, loadBranchInfo]);
+  }, [router.isReady, effectiveId, loadMiembros, loadBranchInfo]);
+
+  // Cambios de filtro o filial reinician paginación
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filtro, effectiveId]);
 
   const checkAdmin = async () => {
     try {
@@ -163,6 +171,16 @@ const ListaMiembros = () => {
       const texto = `${m.first_name} ${m.last_name} ${m.national_id} ${m.annexes?.name || ''} ${m.annexes?.branches?.name || ''}`.toLowerCase();
       return texto.includes(filtro.toLowerCase());
     });
+
+  // Paginación en cliente (máx 50 por página)
+  const totalItems = miembrosFiltrados.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [totalPages, currentPage]);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalItems);
+  const pageItems = miembrosFiltrados.slice(startIndex, endIndex);
 
   const getStandardRoleId = () => roles.find(r => r.level === 4)?.role_id;
 
@@ -276,7 +294,11 @@ const ListaMiembros = () => {
                       size="sm"
                       onClick={() => {
                         setBranchFilter(null);
-                        router.push('/pages/lista-miembros', undefined, { shallow: true });
+                        if (id) {
+                          router.push('/pages/lista-miembros', undefined, { shallow: true });
+                        } else if (activeBranchId) {
+                          clearActiveBranch();
+                        }
                       }}
                       style={{ 
                         whiteSpace: 'nowrap',
@@ -342,14 +364,14 @@ const ListaMiembros = () => {
                 </tr>
               </thead>
               <tbody>
-                {miembrosFiltrados.length === 0 ? (
+                {pageItems.length === 0 ? (
                   <tr>
                     <td colSpan={isAdmin ? 10 : 9} className="text-center text-muted py-4">
                       {filtro ? 'No se encontraron miembros con ese criterio' : 'No hay miembros registrados'}
                     </td>
                   </tr>
                 ) : (
-                  miembrosFiltrados.map((m) => (
+                  pageItems.map((m) => (
                     <tr key={m.member_id}>
                       <td>
                         <Image
@@ -390,6 +412,43 @@ const ListaMiembros = () => {
                 )}
               </tbody>
             </Table>
+            {/* Resumen y paginación */}
+            <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2 mt-3">
+              <div className="text-muted small">
+                Mostrando {totalItems === 0 ? 0 : startIndex + 1} - {endIndex} de {totalItems} miembros
+              </div>
+              {totalPages > 1 && (
+                <Pagination className="mb-0">
+                  <Pagination.First disabled={currentPage === 1} onClick={() => setCurrentPage(1)} />
+                  <Pagination.Prev disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} />
+                  {Array.from({ length: totalPages }).map((_, i) => {
+                    const pageNum = i + 1;
+                    // Limitar número de botones si hay muchas páginas (ej: mostrar primeros 2, últimos 2 y ventana alrededor de actual)
+                    const shouldShow = totalPages <= 7 ||
+                      pageNum === 1 ||
+                      pageNum === 2 ||
+                      pageNum === totalPages ||
+                      pageNum === totalPages - 1 ||
+                      Math.abs(pageNum - currentPage) <= 1;
+                    if (!shouldShow) return null;
+                    // Insertar puntos suspensivos donde se hace salto
+                    const prevShown = pageNum > 2 && pageNum === currentPage + 2 && currentPage > 3;
+                    const preEllipsis = pageNum === totalPages - 2 && currentPage < totalPages - 3;
+                    return (
+                      <Pagination.Item
+                        key={pageNum}
+                        active={pageNum === currentPage}
+                        onClick={() => setCurrentPage(pageNum)}
+                      >
+                        {pageNum}
+                      </Pagination.Item>
+                    );
+                  })}
+                  <Pagination.Next disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} />
+                  <Pagination.Last disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)} />
+                </Pagination>
+              )}
+            </div>
           </div>
         )}
       </Container>

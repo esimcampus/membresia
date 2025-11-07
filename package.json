@@ -36,6 +36,7 @@
     "react-dropzone": "^14.2.3",
     "react-feather": "^2.0.10",
     "react-responsive": "^9.0.2",
+    "react-select": "^5.10.2",
     "sass": "^1.60.0",
     "sass-loader": "^13.2.2",
     "simplebar": "^6.2.4",

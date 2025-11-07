@@ -1,7 +1,7 @@
 // import node module libraries
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ProgressBar, Col, Row, Card, Table, Image, Spinner } from 'react-bootstrap';
+import { ProgressBar, Col, Row, Card, Table, Image, Spinner, Button } from 'react-bootstrap';
 
 // import supabase client
 import { supabase } from 'lib/supabaseClient';
@@ -9,6 +9,7 @@ import { supabase } from 'lib/supabaseClient';
 const ActiveProjects = () => {
     const [branches, setBranches] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [visibleCount, setVisibleCount] = useState(5);
 
     useEffect(() => {
         loadBranchesData();
@@ -120,7 +121,14 @@ const ActiveProjects = () => {
                 })
             );
 
-            setBranches(branchesWithData);
+            // Ordenar por mayor participación y luego por cantidad de miembros (ambos descendente)
+            const sorted = (branchesWithData || []).sort((a, b) => {
+                const pDiff = (b.participation || 0) - (a.participation || 0);
+                if (pDiff !== 0) return pDiff;
+                return (b.membersCount || 0) - (a.membersCount || 0);
+            });
+            setBranches(sorted);
+            setVisibleCount(5); // reset visible on reload
         } catch (error) {
             console.error('Error cargando filiales:', error);
         } finally {
@@ -168,7 +176,7 @@ const ActiveProjects = () => {
                                     </td>
                                 </tr>
                             ) : (
-                                branches.map((branch, index) => (
+                                branches.slice(0, visibleCount).map((branch, index) => (
                                     <tr key={branch.branch_id}>
                                         <td className="align-middle">
                                             <div className="d-flex align-items-center">
@@ -250,7 +258,13 @@ const ActiveProjects = () => {
                         </tbody>
                     </Table>
                     <Card.Footer className="bg-white text-center">
-                        <Link href="#" className="link-primary">Ver más unidades</Link>
+                        {branches.length > visibleCount ? (
+                            <Button variant="link" className="link-primary" onClick={() => setVisibleCount(c => Math.min(c + 5, branches.length))}>
+                                Ver más unidades
+                            </Button>
+                        ) : (
+                            <span className="text-muted small">No hay más unidades para mostrar</span>
+                        )}
                     </Card.Footer>
                 </Card>
             </Col>

@@ -12,6 +12,7 @@ const UnidadHeader = () => {
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [countries, setCountries] = useState([]);
   const [editFormData, setEditFormData] = useState({
     name: '',
@@ -117,6 +118,41 @@ const UnidadHeader = () => {
       alert('Error al actualizar la filial: ' + error.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteBranch = async () => {
+    if (!id) return;
+    const ok = window.confirm('Está por eliminar la Filial. Esta acción es permanente. ¿Desea continuar?');
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      // Verificar anexos asociados
+      const { count, error: countErr } = await supabase
+        .from('annexes')
+        .select('annex_id', { count: 'exact', head: true })
+        .eq('branch_id', id);
+      if (countErr) throw countErr;
+      if ((count ?? 0) > 0) {
+        alert('No es posible eliminar la Filial porque aún tiene anexos asociados. Elimine todos los anexos primero.');
+        return;
+      }
+
+      // Eliminar filial
+      const { error: delErr } = await supabase
+        .from('branches')
+        .delete()
+        .eq('branch_id', id);
+      if (delErr) throw delErr;
+
+      alert('Filial eliminada correctamente');
+      setShowEditModal(false);
+      router.push('/pages/unidad');
+    } catch (e) {
+      console.error('Error eliminando filial:', e);
+      alert(e.message || 'No se pudo eliminar la Filial');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -277,17 +313,29 @@ const UnidadHeader = () => {
               </Form.Group>
             </Form>
           </Modal.Body>
-          <Modal.Footer>
-            <Button variant="outline-secondary" onClick={() => setShowEditModal(false)}>
-              Cancelar
-            </Button>
-            <Button 
-              variant="primary" 
-              onClick={handleSaveBranch}
-              disabled={saving}
-            >
-              {saving ? 'Guardando...' : 'Guardar'}
-            </Button>
+          <Modal.Footer className="d-flex justify-content-between">
+            <div>
+              <Button 
+                variant="outline-danger" 
+                onClick={handleDeleteBranch}
+                disabled={deleting}
+              >
+                <span className="d-inline d-md-none"><i className="fe fe-trash"></i></span>
+                <span className="d-none d-md-inline">{deleting ? 'Eliminando...' : 'Eliminar'}</span>
+              </Button>
+            </div>
+            <div className="d-flex gap-2">
+              <Button variant="outline-secondary" onClick={() => setShowEditModal(false)}>
+                Cancelar
+              </Button>
+              <Button 
+                variant="primary" 
+                onClick={handleSaveBranch}
+                disabled={saving}
+              >
+                {saving ? 'Guardando...' : 'Guardar'}
+              </Button>
+            </div>
           </Modal.Footer>
         </Modal>
       </Col>

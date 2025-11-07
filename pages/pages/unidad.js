@@ -1,6 +1,8 @@
 // import node module libraries
 import { useEffect, useState } from 'react';
 import { Col, Row, Container, Form, Button, Modal } from 'react-bootstrap';
+import Select from 'react-select';
+import { useActiveBranch } from 'context/ActiveBranchContext';
 import { useRouter } from 'next/router';
 import { supabase } from 'lib/supabaseClient';
 import { toTitleCase } from 'lib/textFormatters';
@@ -22,6 +24,8 @@ const Profile = () => {
   const { id } = router.query;
   const [branches, setBranches] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState('');
+  const { activeBranchId, setActiveBranchId, clearActiveBranch } = useActiveBranch();
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -56,14 +60,36 @@ const Profile = () => {
     loadCountries();
   }, []);
 
+  // Verificar si el usuario actual es administrador para activar persistencia
   useEffect(() => {
-    // Resetear selección cuando se cambia de página o se recarga
-    if (!id) {
-      setSelectedBranch('');
-    } else {
+    (async () => {
+      try {
+        const { data: auth } = await supabase.auth.getUser();
+        const user = auth?.user;
+        if (!user) { setIsAdmin(false); return; }
+        const { data: sys, error } = await supabase
+          .from('system_users')
+          .select('roles(level)')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (error) { setIsAdmin(false); return; }
+        setIsAdmin(sys?.roles?.level === 1);
+      } catch { setIsAdmin(false); }
+    })();
+  }, []);
+
+  useEffect(() => {
+    // Si hay id en query, usarlo; si no y admin tiene uno persistido, usar el persistido
+    if (id) {
       setSelectedBranch(id);
+    } else if (isAdmin && activeBranchId) {
+      setSelectedBranch(activeBranchId);
+      // Navegar para mostrar contenido consistente con filtro
+      router.replace(`/pages/unidad?id=${activeBranchId}`, undefined, { shallow: true });
+    } else {
+      setSelectedBranch('');
     }
-  }, [id]);
+  }, [id, activeBranchId, isAdmin]);
 
   useEffect(() => {
     if (selectedCountryId) {
@@ -159,12 +185,14 @@ const Profile = () => {
     }
   };
 
-  const handleBranchChange = (e) => {
-    const branchId = e.target.value;
+  const handleBranchSelectChange = (option) => {
+    const branchId = option ? String(option.value) : '';
     setSelectedBranch(branchId);
     if (branchId) {
+      if (isAdmin) setActiveBranchId(branchId);
       router.push(`/pages/unidad?id=${branchId}`, undefined, { shallow: true });
     } else {
+      if (isAdmin) clearActiveBranch();
       router.push('/pages/unidad', undefined, { shallow: true });
     }
   };
@@ -456,19 +484,22 @@ const Profile = () => {
       {/* Selector de Filial */}
       <Row className="mb-4">
         <Col md={6}>
-         
-          <Form.Select 
-            value={selectedBranch} 
-            onChange={handleBranchChange}
-            disabled={loading}
-          >
-            <option value="">Seleccione una filial...</option>
-            {branches.map(branch => (
-              <option key={branch.branch_id} value={branch.branch_id}>
-                {branch.name}
-              </option>
-            ))}
-          </Form.Select>
+          <Select
+            classNamePrefix="select"
+            placeholder="Seleccione o busque una filial..."
+            isClearable
+            isDisabled={loading}
+            isLoading={loading}
+            options={branches.map(b => ({ value: String(b.branch_id), label: b.name }))}
+            value={selectedBranch ? { value: String(selectedBranch), label: (branches.find(b => String(b.branch_id) === String(selectedBranch))?.name) || '' } : null}
+            onChange={handleBranchSelectChange}
+            noOptionsMessage={({ inputValue }) => inputValue ? `Sin resultados para "${inputValue}"` : 'Escribe para buscar'}
+          />
+          {isAdmin && activeBranchId && (
+            <Button variant="outline-secondary" size="sm" className="mt-2" onClick={() => handleBranchSelectChange(null)}>
+              Quitar filtro de Filial
+            </Button>
+          )}
         </Col>
         <Col md={6} className="d-flex align-items-end justify-content-center justify-content-md-end">
           <Button 

@@ -16,7 +16,6 @@ const GeneralMiembro = () => {
     residence_address: '',
     phone: '',
     marital_status_id: '',
-    num_children: 0,
     date_of_birth: '',
     date_of_baptism: '',
     member_status_id: '',
@@ -214,10 +213,9 @@ const GeneralMiembro = () => {
         national_id: formData.national_id.trim(),
         nationality_country_id: formData.nationality_country_id,
         annex_id: formData.annex_id || null,
-  residence_address: (formData.residence_address ? toTitleCase(formData.residence_address.trim()) : null),
+        residence_address: (formData.residence_address ? toTitleCase(formData.residence_address.trim()) : null),
         phone: formData.phone.trim() || null,
         marital_status_id: formData.marital_status_id,
-        num_children: parseInt(formData.num_children) || 0,
         date_of_birth: formData.date_of_birth,
         date_of_baptism: formData.date_of_baptism || null,
         member_status_id: formData.member_status_id,
@@ -258,7 +256,6 @@ const GeneralMiembro = () => {
         residence_address: '',
         phone: '',
         marital_status_id: '',
-        num_children: 0,
         date_of_birth: '',
         date_of_baptism: '',
         member_status_id: '',
@@ -451,18 +448,7 @@ const GeneralMiembro = () => {
                 </Col>
               </Row>
               <Row className="mb-3">
-                <Col md={2}>
-                  <Form.Label>Hijos</Form.Label>
-                  <Form.Control 
-                    type="number" 
-                    name="num_children"
-                    placeholder="0" 
-                    min="0"
-                    value={formData.num_children}
-                    onChange={handleChange}
-                  />
-                </Col>
-                <Col md={5}>
+                <Col md={6}>
                   <Form.Label>Fecha de Nacimiento <span className="text-danger">*</span></Form.Label>
                   <Form.Control 
                     type="date" 
@@ -472,7 +458,7 @@ const GeneralMiembro = () => {
                     required
                   />
                 </Col>
-                <Col md={5}>
+                <Col md={6}>
                   <Form.Label>Fecha de Bautizmo</Form.Label>
                   <Form.Control 
                     type="date" 

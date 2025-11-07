@@ -1,5 +1,6 @@
 // import node module libraries
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
+import { useActiveBranch } from 'context/ActiveBranchContext';
 import { useRouter } from 'next/router';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -14,6 +15,7 @@ import EventModal from 'sub-components/events/EventModal';
 const Calendario = () => {
   const router = useRouter();
   const calendarRef = useRef(null);
+  const { activeBranchId } = useActiveBranch();
   const [events, setEvents] = useState([]);
   const [branches, setBranches] = useState([]);
   const [selectedBranch, setSelectedBranch] = useState('');
@@ -29,14 +31,20 @@ const Calendario = () => {
     setToast({ show: true, message, variant });
   };
 
-  // Detectar parámetro id en URL al cargar (consistente con página de unidad)
+  // Detectar parámetro id en URL; si no existe y hay contexto activo, usarlo
   useEffect(() => {
-    if (router.isReady && router.query.id) {
+    if (!router.isReady) return;
+    if (router.query.id) {
       const branchId = router.query.id;
       console.log('🔗 Branch ID detectado en URL (parámetro id):', branchId);
       setSelectedBranch(branchId);
+    } else if (activeBranchId) {
+      console.log('🔗 Usando filial activa del contexto en calendario:', activeBranchId);
+      setSelectedBranch(activeBranchId);
+    } else {
+      setSelectedBranch('');
     }
-  }, [router.isReady, router.query.id]);
+  }, [router.isReady, router.query.id, activeBranchId]);
 
   const loadEvents = useCallback(async () => {
     try {

@@ -1,15 +1,18 @@
 import { Container, Row, Col, Card, Table, Badge, Spinner, Toast, Form, Button, Modal } from 'react-bootstrap';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import { InputGroup } from 'react-bootstrap';
 import { Upload, Download, Trash } from 'react-bootstrap-icons';
 import { useDropzone } from 'react-dropzone';
 import { supabase } from 'lib/supabaseClient';
 import Link from 'next/link';
+import { useActiveBranch } from 'context/ActiveBranchContext';
 
 const Documentos = () => {
   const router = useRouter();
   const { id } = router.query; // ID de la filial desde URL (opcional)
+  const { activeBranchId, clearActiveBranch } = useActiveBranch();
+  const effectiveId = useMemo(() => id || activeBranchId || null, [id, activeBranchId]);
   
   const [filtro, setFiltro] = useState("");
   const [documentos, setDocumentos] = useState([]);
@@ -179,12 +182,12 @@ const Documentos = () => {
     }
   };
 
-  const loadBranchInfo = useCallback(async () => {
+  const loadBranchInfo = useCallback(async (branchId) => {
     try {
       const { data, error } = await supabase
         .from('branches')
         .select('branch_id, name')
-        .eq('branch_id', id)
+        .eq('branch_id', branchId)
         .single();
       
       if (error) throw error;
@@ -193,7 +196,7 @@ const Documentos = () => {
     } catch (e) {
       console.error('Error cargando info de filial:', e);
     }
-  }, [id]);
+  }, []);
 
   const loadDocumentos = useCallback(async () => {
     setLoading(true);
@@ -229,10 +232,13 @@ const Documentos = () => {
 
       let filteredData = data || [];
 
-      // Filtrar por filial si viene parámetro id o si es Gestor
+      // Filtrar por filial si viene parámetro id, contexto activo o si es Gestor
       if (id) {
         console.log('🔍 Filtrando documentos por filial (URL):', id);
         filteredData = filteredData.filter(doc => doc.branches?.branch_id === id);
+      } else if (activeBranchId) {
+        console.log('🔍 Filtrando documentos por filial (contexto):', activeBranchId);
+        filteredData = filteredData.filter(doc => doc.branches?.branch_id === activeBranchId);
       } else if (userLevel === 2 && userBranches.length > 0) {
         console.log('🔍 Filtrando documentos por filiales del gestor');
         filteredData = filteredData.filter(doc => 
@@ -248,18 +254,20 @@ const Documentos = () => {
     } finally {
       setLoading(false);
     }
-  }, [id, userLevel, userBranches]);
+  }, [id, activeBranchId, userLevel, userBranches]);
 
   // Cargar datos iniciales
   useEffect(() => {
     if (router.isReady) {
       checkUserRole();
       loadBranches();
-      if (id) {
-        loadBranchInfo();
+      if (effectiveId) {
+        loadBranchInfo(effectiveId);
+      } else {
+        setBranchFilter(null);
       }
     }
-  }, [router.isReady, id, loadBranchInfo]);
+  }, [router.isReady, effectiveId, loadBranchInfo]);
 
   const loadBranches = async () => {
     try {
@@ -298,12 +306,12 @@ const Documentos = () => {
   const handleOpenUploadModal = () => {
     setUploadFile(null);
     setUploadFormData({
-      branch_id: id || '',
+      branch_id: effectiveId || '',
       annex_id: '',
       description: ''
     });
-    if (id) {
-      loadAnnexes(id);
+    if (effectiveId) {
+      loadAnnexes(effectiveId);
     }
     setShowUploadModal(true);
   };
@@ -493,7 +501,11 @@ const Documentos = () => {
                       size="sm"
                       onClick={() => {
                         setBranchFilter(null);
-                        router.push('/pages/documentos', undefined, { shallow: true });
+                        if (id) {
+                          router.push('/pages/documentos', undefined, { shallow: true });
+                        } else if (activeBranchId) {
+                          clearActiveBranch();
+                        }
                       }}
                       style={{ 
                         whiteSpace: 'nowrap',
@@ -760,7 +772,7 @@ const Documentos = () => {
                       name="branch_id"
                       value={uploadFormData.branch_id}
                       onChange={handleUploadFormChange}
-                      disabled={!!id}
+                      disabled={!!effectiveId}
                     >
                       <option value="">Seleccionar filial...</option>
                       {branches.map(branch => (
@@ -769,7 +781,7 @@ const Documentos = () => {
                         </option>
                       ))}
                     </Form.Select>
-                    {id && (
+                    {effectiveId && (
                       <Form.Text className="text-muted">
                         Filial pre-seleccionada desde el filtro actual
                       </Form.Text>
