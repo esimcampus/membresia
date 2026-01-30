@@ -6,6 +6,7 @@ import { useActiveBranch } from 'context/ActiveBranchContext';
 import { useRouter } from 'next/router';
 import { supabase } from 'lib/supabaseClient';
 import { toTitleCase } from 'lib/textFormatters';
+import { logAudit } from 'lib/auditLog';
 
 // import widget as custom components
 import { PageHeading } from 'widgets'
@@ -325,6 +326,21 @@ const Profile = () => {
         .single();
       
       if (error) throw error;
+      
+      // Auditar creación de país
+      try {
+        await logAudit({
+          entityType: 'countries',
+          entityId: data.country_id,
+          action: 'CREATE',
+          description: `País creado: ${formattedName}`,
+          newValues: { name: formattedName },
+          sendEmail: false
+        });
+      } catch (auditErr) {
+        console.error('❌ Error registrando auditoría de país:', auditErr);
+      }
+      
       await loadCountries();
       setSelectedCountryId(data.country_id);
       return data.country_id;
@@ -346,6 +362,21 @@ const Profile = () => {
         .single();
       
       if (error) throw error;
+      
+      // Auditar creación de estado
+      try {
+        await logAudit({
+          entityType: 'states',
+          entityId: data.state_id,
+          action: 'CREATE',
+          description: `Estado/Provincia creado: ${formattedName}`,
+          newValues: { name: formattedName, country_id: countryId },
+          sendEmail: false
+        });
+      } catch (auditErr) {
+        console.error('❌ Error registrando auditoría de estado:', auditErr);
+      }
+      
       await loadStates(countryId);
       setSelectedStateId(data.state_id);
       setIsCreatingNewState(false);
@@ -369,6 +400,21 @@ const Profile = () => {
         .single();
       
       if (error) throw error;
+      
+      // Auditar creación de ciudad
+      try {
+        await logAudit({
+          entityType: 'cities',
+          entityId: data.city_id,
+          action: 'CREATE',
+          description: `Ciudad creada: ${formattedName}`,
+          newValues: { name: formattedName, state_id: stateId, zip_code: zipCode },
+          sendEmail: false
+        });
+      } catch (auditErr) {
+        console.error('❌ Error registrando auditoría de ciudad:', auditErr);
+      }
+      
       await loadCities(stateId);
       setSelectedCityId(data.city_id);
       setIsCreatingNewCity(false);
@@ -472,6 +518,27 @@ const Profile = () => {
 
       if (branchError) throw branchError;
 
+      // Auditar creación de filial
+      try {
+        console.log('📝 Registrando auditoría de creación de filial...');
+        await logAudit({
+          entityType: 'branches',
+          entityId: branch.branch_id,
+          action: 'CREATE',
+          description: `Filial creada: ${formData.branchName}`,
+          newValues: {
+            name: formData.branchName,
+            country_id: selectedCountryId,
+            zone_id: formData.branchZoneId,
+            country: country.name
+          },
+          sendEmail: true
+        });
+        console.log('✅ Auditoría de filial registrada correctamente');
+      } catch (auditErr) {
+        console.error('❌ Error registrando auditoría de filial:', auditErr);
+      }
+
       // 7. Crear el anexo principal (sede)
       const { data: annex, error: annexError } = await supabase
         .from('annexes')
@@ -490,6 +557,31 @@ const Profile = () => {
         .single();
 
       if (annexError) throw annexError;
+
+      // Auditar creación de anexo
+      try {
+        console.log('📝 Registrando auditoría de creación de anexo...');
+        await logAudit({
+          entityType: 'annexes',
+          entityId: annex.annex_id,
+          action: 'CREATE',
+          description: `Anexo creado: ${formData.annexName} (Sede de ${formData.branchName})`,
+          newValues: {
+            name: formData.annexName,
+            description: formData.annexDescription,
+            address: formData.annexAddress,
+            city_id: finalCityId,
+            phone: formData.annexPhone,
+            email: formData.annexEmail,
+            is_headquarters: true,
+            branch_id: branch.branch_id
+          },
+          sendEmail: true
+        });
+        console.log('✅ Auditoría de anexo registrada correctamente');
+      } catch (auditErr) {
+        console.error('❌ Error registrando auditoría de anexo:', auditErr);
+      }
 
       // 8. Limpiar y navegar
       await loadBranches();

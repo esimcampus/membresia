@@ -5,6 +5,7 @@ import { PageHeading } from 'widgets';
 import { useRouter } from 'next/router';
 import { supabase } from 'lib/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
+import { logAudit } from 'lib/auditLog';
 
 const UsuarioPage = () => {
   const router = useRouter();
@@ -178,6 +179,20 @@ const UsuarioPage = () => {
         if (insErr) throw insErr;
         setSysUser(insData);
 
+        // Auditar creación de rol de usuario
+        try {
+          await logAudit({
+            entityType: 'system_users',
+            entityId: insData.user_id,
+            action: 'CREATE',
+            description: `Rol creado: ${selectedRole.role_name} para ${member.first_name} ${member.last_name}`,
+            newValues: { role_id: insData.role_id, role_name: selectedRole.role_name, email: insData.email },
+            sendEmail: true
+          });
+        } catch (auditErr) {
+          console.error('❌ Error registrando auditoría de creación de rol:', auditErr);
+        }
+
         // Gestionar branch_managers si es nivel 2
         const branchId = member?.annexes?.branches?.branch_id;
         if (selectedRole.level === 2 && branchId) {
@@ -240,6 +255,20 @@ const UsuarioPage = () => {
             });
           } catch (_) {}
 
+          // Auditar eliminación de rol
+          try {
+            await logAudit({
+              entityType: 'system_users',
+              entityId: sysUser.user_id,
+              action: 'DELETE',
+              description: `Rol eliminado: ${sysUser.roles?.role_name || 'N/A'} para ${member.first_name} ${member.last_name}`,
+              oldValues: { role_id: sysUser.role_id, role_name: sysUser.roles?.role_name, email: sysUser.email },
+              sendEmail: true
+            });
+          } catch (auditErr) {
+            console.error('❌ Error registrando auditoría de eliminación de rol:', auditErr);
+          }
+
           // Limpiar estado local
           setSysUser(null);
           setShowReset(false);
@@ -250,6 +279,8 @@ const UsuarioPage = () => {
           setTimeout(() => router.push('/pages/lista-miembros'), 1200);
           return;
         }
+        const oldRoleId = sysUser.role_id;
+        const oldRole = roles.find(r => r.role_id === oldRoleId);
         const { error: upErr } = await supabase
           .from('system_users')
           .update({
@@ -259,6 +290,23 @@ const UsuarioPage = () => {
           })
           .eq('member_id', member.member_id);
         if (upErr) throw upErr;
+
+        // Auditar cambio de rol
+        if (oldRoleId !== Number(form.role_id)) {
+          try {
+            await logAudit({
+              entityType: 'system_users',
+              entityId: sysUser.user_id,
+              action: 'UPDATE',
+              description: `Rol actualizado de ${oldRole?.role_name} a ${selectedRole.role_name} para ${member.first_name} ${member.last_name}`,
+              oldValues: { role_id: oldRoleId, role_name: oldRole?.role_name },
+              newValues: { role_id: Number(form.role_id), role_name: selectedRole.role_name },
+              sendEmail: true
+            });
+          } catch (auditErr) {
+            console.error('❌ Error registrando auditoría de actualización de rol:', auditErr);
+          }
+        }
 
         const branchId = member?.annexes?.branches?.branch_id;
         // Añadir a branch_managers si ahora es nivel 2

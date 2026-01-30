@@ -7,6 +7,7 @@ import { supabase } from 'lib/supabaseClient';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useActiveBranch } from 'context/ActiveBranchContext';
+import { logAudit } from 'lib/auditLog';
 
 const ListaMiembros = () => {
   const router = useRouter();
@@ -320,6 +321,25 @@ const ListaMiembros = () => {
           console.error('Error actualizando rol:', upErr);
           showToast(upErr.message || 'No se pudo actualizar el rol', 'danger');
           return;
+        }
+
+        // Auditar cambio de rol
+        if (prevRoleId !== Number(newRoleId)) {
+          try {
+            console.log('📝 Registrando auditoría de cambio de rol...');
+            await logAudit({
+              entityType: 'system_users',
+              entityId: m.system_users.user_id,
+              action: 'UPDATE',
+              description: `Rol actualizado de ${prevRole?.role_name} a ${newRole?.role_name} para ${m.first_name} ${m.last_name}`,
+              oldValues: { role_id: prevRoleId, role_name: prevRole?.role_name },
+              newValues: { role_id: Number(newRoleId), role_name: newRole?.role_name },
+              sendEmail: true
+            });
+            console.log('✅ Auditoría de cambio de rol registrada correctamente');
+          } catch (auditErr) {
+            console.error('❌ Error registrando auditoría de cambio de rol:', auditErr);
+          }
         }
 
         // Gestionar branch_managers si cambia a nivel 2 (Gestor de Filiales)
