@@ -23,6 +23,8 @@ const Profile = () => {
   const router = useRouter();
   const { id } = router.query;
   const [branches, setBranches] = useState([]);
+  const [zones, setZones] = useState([]);
+  const [selectedZone, setSelectedZone] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('');
   const { activeBranchId, setActiveBranchId, clearActiveBranch } = useActiveBranch();
   const [isAdmin, setIsAdmin] = useState(false);
@@ -33,6 +35,7 @@ const Profile = () => {
   // Datos del formulario
   const [formData, setFormData] = useState({
     branchName: '',
+    branchZoneId: '',
     annexName: '',
     annexDescription: '',
     annexAddress: '',
@@ -57,6 +60,7 @@ const Profile = () => {
 
   useEffect(() => {
     loadBranches();
+    loadZones();
     loadCountries();
   }, []);
 
@@ -129,7 +133,7 @@ const Profile = () => {
     try {
       const { data, error } = await supabase
         .from('branches')
-        .select('branch_id, name')
+        .select('branch_id, name, zone_id, zones(name)')
         .order('name');
       
       if (error) throw error;
@@ -138,6 +142,19 @@ const Profile = () => {
       console.error('Error cargando filiales:', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadZones = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('zones')
+        .select('zone_id, name')
+        .order('name');
+      if (error) throw error;
+      setZones(data || []);
+    } catch (e) {
+      console.error('Error cargando zonas:', e);
     }
   };
 
@@ -195,6 +212,14 @@ const Profile = () => {
       if (isAdmin) clearActiveBranch();
       router.push('/pages/unidad', undefined, { shallow: true });
     }
+  };
+
+  const handleZoneSelectChange = (option) => {
+    const zoneId = option ? String(option.value) : '';
+    setSelectedZone(zoneId);
+    // Al cambiar de zona, limpiamos la filial seleccionada y el filtro persistido
+    setSelectedBranch('');
+    if (isAdmin) clearActiveBranch();
   };
 
   // Campos a forzar Title Case automáticamente
@@ -371,7 +396,28 @@ const Profile = () => {
         return;
       }
 
-      // 2. Crear estado si es necesario
+      // 2. Validar que se haya seleccionado una zona
+      if (!formData.branchZoneId) {
+        alert('Por favor seleccione una zona');
+        setSaving(false);
+        return;
+      }
+
+      // 3. Verificar si ya existe una filial con el mismo nombre
+      const { data: existingBranches, error: checkError } = await supabase
+        .from('branches')
+        .select('branch_id, name')
+        .eq('name', formData.branchName.trim());
+
+      if (checkError) throw checkError;
+
+      if (existingBranches && existingBranches.length > 0) {
+        alert(`Ya existe una filial con el nombre "${formData.branchName}". Por favor elija otro nombre.`);
+        setSaving(false);
+        return;
+      }
+
+      // 4. Crear estado si es necesario
       let finalStateId = selectedStateId;
       if (isCreatingNewState && stateInput.trim()) {
         finalStateId = await createState(stateInput.trim(), selectedCountryId);
@@ -381,7 +427,7 @@ const Profile = () => {
         }
       }
 
-      // 3. Crear ciudad si es necesario
+      // 5. Crear ciudad si es necesario
       let finalCityId = selectedCityId;
       if (isCreatingNewCity && cityInput.trim() && finalStateId) {
         // Validar que se haya ingresado el código postal para ciudad nueva
@@ -412,20 +458,21 @@ const Profile = () => {
         return;
       }
 
-      // 4. Crear la filial
+      // 6. Crear la filial
       const { data: branch, error: branchError } = await supabase
         .from('branches')
         .insert({
           name: formData.branchName,
           // Guardamos la relación mediante la FK al país
-          country_id: selectedCountryId
+          country_id: selectedCountryId,
+          zone_id: formData.branchZoneId || null
         })
         .select()
         .single();
 
       if (branchError) throw branchError;
 
-      // 5. Crear el anexo principal (sede)
+      // 7. Crear el anexo principal (sede)
       const { data: annex, error: annexError } = await supabase
         .from('annexes')
         .insert({
@@ -444,7 +491,7 @@ const Profile = () => {
 
       if (annexError) throw annexError;
 
-      // 6. Limpiar y navegar
+      // 8. Limpiar y navegar
       await loadBranches();
       resetForm();
       setShowModal(false);
@@ -460,6 +507,7 @@ const Profile = () => {
   const resetForm = () => {
     setFormData({
       branchName: '',
+      branchZoneId: '',
       annexName: '',
       annexDescription: '',
       annexAddress: '',
@@ -483,14 +531,29 @@ const Profile = () => {
 
       {/* Selector de Filial */}
       <Row className="mb-4">
-        <Col md={6}>
+        <Col md={4} className="mb-3 mb-md-0">
+          <Select
+            classNamePrefix="select"
+            placeholder="Filtrar por zona..."
+            isClearable
+            isDisabled={loading}
+            isLoading={loading}
+            options={zones.map(z => ({ value: String(z.zone_id), label: z.name }))}
+            value={selectedZone ? { value: String(selectedZone), label: (zones.find(z => String(z.zone_id) === String(selectedZone))?.name) || '' } : null}
+            onChange={handleZoneSelectChange}
+            noOptionsMessage={({ inputValue }) => inputValue ? `Sin resultados para "${inputValue}"` : 'Sin zonas'}
+          />
+        </Col>
+        <Col md={4} className="mb-3 mb-md-0">
           <Select
             classNamePrefix="select"
             placeholder="Seleccione o busque una filial..."
             isClearable
             isDisabled={loading}
             isLoading={loading}
-            options={branches.map(b => ({ value: String(b.branch_id), label: b.name }))}
+            options={branches
+              .filter(b => !selectedZone || String(b.zone_id) === String(selectedZone))
+              .map(b => ({ value: String(b.branch_id), label: b.name }))}
             value={selectedBranch ? { value: String(selectedBranch), label: (branches.find(b => String(b.branch_id) === String(selectedBranch))?.name) || '' } : null}
             onChange={handleBranchSelectChange}
             noOptionsMessage={({ inputValue }) => inputValue ? `Sin resultados para "${inputValue}"` : 'Escribe para buscar'}
@@ -501,10 +564,13 @@ const Profile = () => {
             </Button>
           )}
         </Col>
-        <Col md={6} className="d-flex align-items-end justify-content-center justify-content-md-end">
+        <Col md={4} className="d-flex align-items-end justify-content-center justify-content-md-end">
           <Button 
             variant="primary" 
-            onClick={() => setShowModal(true)}
+            onClick={() => {
+              setFormData(prev => ({ ...prev, branchZoneId: selectedZone || '' }));
+              setShowModal(true);
+            }}
             className="mt-3 mt-md-0"
           >
             Nueva Filial
@@ -545,6 +611,26 @@ const Profile = () => {
                     {countries.map(country => (
                       <option key={country.country_id} value={country.country_id}>
                         {country.name}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Form.Group>
+              </Col>
+            </Row>
+
+            <Row className="mb-3">
+              <Col md={12}>
+                <Form.Group>
+                  <Form.Label>Zona *</Form.Label>
+                  <Form.Select
+                    name="branchZoneId"
+                    value={formData.branchZoneId}
+                    onChange={handleInputChange}
+                  >
+                    <option value="">Seleccione una zona...</option>
+                    {zones.map(zone => (
+                      <option key={zone.zone_id} value={zone.zone_id}>
+                        {zone.name}
                       </option>
                     ))}
                   </Form.Select>

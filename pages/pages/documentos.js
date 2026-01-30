@@ -7,6 +7,7 @@ import { useDropzone } from 'react-dropzone';
 import { supabase } from 'lib/supabaseClient';
 import Link from 'next/link';
 import { useActiveBranch } from 'context/ActiveBranchContext';
+import { logAudit } from 'lib/auditLog';
 
 const Documentos = () => {
   const router = useRouter();
@@ -36,10 +37,27 @@ const Documentos = () => {
   });
   const [branches, setBranches] = useState([]);
   const [annexes, setAnnexes] = useState([]);
+  const [categories, setCategories] = useState([]);
 
   const showToast = (message, variant = 'info') => {
     setToast({ show: true, message, variant });
   };
+
+  // Cargar categorías de documentos
+  const loadDocumentCategories = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('document_categories')
+        .select('*')
+        .order('name');
+      
+      if (error) throw error;
+      setCategories(data || []);
+      console.log('📁 Categorías cargadas:', data);
+    } catch (e) {
+      console.error('Error cargando categorías:', e);
+    }
+  }, []);
 
   // Configuración de dropzone
   const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.odt', '.xlsx', '.csv', '.ods', '.jpg', '.jpeg', '.png', '.pptx'];
@@ -204,21 +222,10 @@ const Documentos = () => {
       let query = supabase
         .from('documents')
         .select(`
-          document_id,
-          file_name,
-          file_type,
-          file_url,
-          description,
-          created_at,
-          branch_id,
-          annex_id,
-          branches (branch_id, name),
-          annexes (annex_id, name),
-          members:uploaded_by (
-            member_id,
-            first_name,
-            last_name
-          )
+          *,
+          branches:branch_id (branch_id, name),
+          annexes:annex_id (annex_id, name),
+          document_categories:category_id (category_id, name, icon)
         `)
         .order('created_at', { ascending: false });
 
@@ -247,6 +254,7 @@ const Documentos = () => {
       }
 
       console.log('✅ Documentos cargados:', filteredData.length);
+      console.log('📦 Primer documento (debug):', filteredData[0]);
       setDocumentos(filteredData);
     } catch (err) {
       console.error('Error inesperado:', err);
@@ -261,13 +269,14 @@ const Documentos = () => {
     if (router.isReady) {
       checkUserRole();
       loadBranches();
+      loadDocumentCategories();
       if (effectiveId) {
         loadBranchInfo(effectiveId);
       } else {
         setBranchFilter(null);
       }
     }
-  }, [router.isReady, effectiveId, loadBranchInfo]);
+  }, [router.isReady, effectiveId, loadBranchInfo, loadDocumentCategories]);
 
   const loadBranches = async () => {
     try {
@@ -308,7 +317,8 @@ const Documentos = () => {
     setUploadFormData({
       branch_id: effectiveId || '',
       annex_id: '',
-      description: ''
+      description: '',
+      category_id: ''
     });
     if (effectiveId) {
       loadAnnexes(effectiveId);
@@ -335,6 +345,10 @@ const Documentos = () => {
       showToast('Por favor selecciona una filial', 'warning');
       return;
     }
+    if (!uploadFormData.category_id) {
+      showToast('Por favor selecciona una categoría', 'warning');
+      return;
+    }
 
     setUploading(true);
     try {
@@ -353,6 +367,7 @@ const Documentos = () => {
       if (uploadFormData.description) {
         formData.append('description', uploadFormData.description);
       }
+      formData.append('categoryId', uploadFormData.category_id);
 
       const response = await fetch('/api/documents/upload', {
         method: 'POST',
@@ -366,6 +381,31 @@ const Documentos = () => {
 
       if (!response.ok) {
         throw new Error(result.error || 'Error subiendo documento');
+      }
+
+      // Registrar en auditoría
+      try {
+        console.log('📝 Registrando auditoría de documento:', result.document?.document_id);
+        await logAudit({
+          entityType: 'documentos',
+          entityId: result.document?.document_id,
+          action: 'CREATE',
+          newValues: {
+            file_name: uploadFile.name,
+            category_id: uploadFormData.category_id,
+            description: uploadFormData.description,
+            branch_id: uploadFormData.branch_id,
+            annex_id: uploadFormData.annex_id
+          },
+          description: `Documento subido: ${uploadFile.name}`,
+          branchId: uploadFormData.branch_id,
+          annexId: uploadFormData.annex_id || null,
+          sendEmail: true
+        });
+        console.log('✅ Auditoría registrada correctamente');
+      } catch (auditError) {
+        console.error('❌ Error registrando auditoría:', auditError);
+        // No fallar la subida si falla la auditoría
       }
 
       showToast('Documento subido exitosamente', 'success');
@@ -440,6 +480,23 @@ const Documentos = () => {
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Error al eliminar documento');
+      }
+
+      // Registrar en auditoría
+      try {
+        console.log('📝 Registrando auditoría de eliminación:', documentId);
+        await logAudit({
+          entityType: 'documentos',
+          entityId: documentId,
+          action: 'DELETE',
+          oldValues: { file_name: fileName },
+          description: `Documento eliminado: ${fileName}`,
+          sendEmail: true
+        });
+        console.log('✅ Auditoría de eliminación registrada');
+      } catch (auditError) {
+        console.error('❌ Error registrando auditoría de eliminación:', auditError);
+        // No fallar la eliminación si falla la auditoría
       }
 
       showToast('Documento eliminado exitosamente', 'success');
@@ -577,6 +634,7 @@ const Documentos = () => {
                         <th className="border-0 py-3">Nombre del Archivo</th>
                         <th className="border-0 py-3">Propietario</th>
                         <th className="border-0 py-3">Filial / Anexo</th>
+                        <th className="border-0 py-3">Categoría</th>
                         <th className="border-0 py-3">Fecha de Creación</th>
                         <th className="border-0 py-3 text-center">Acciones</th>
                       </tr>
@@ -665,6 +723,37 @@ const Documentos = () => {
                                   </small>
                                 )}
                               </div>
+                            </td>
+
+                            {/* Categoría */}
+                            <td className="align-middle">
+                              {doc.document_categories ? (
+                                <div className="d-flex align-items-center gap-2">
+                                  <div 
+                                    className="d-flex align-items-center justify-content-center rounded"
+                                    style={{ 
+                                      width: '32px', 
+                                      height: '32px',
+                                      background: '#f0f0f0'
+                                    }}
+                                  >
+                                    <i 
+                                      className={`fe ${doc.document_categories.icon || 'fe-folder'}`} 
+                                      style={{ 
+                                        fontSize: '1rem',
+                                        color: '#4a5568'
+                                      }}
+                                      title={doc.document_categories.icon ? `Icon: ${doc.document_categories.icon}` : 'Sin icono'}
+                                    ></i>
+                                  </div>
+                                  <small className="fw-semibold">{doc.document_categories.name || 'Sin nombre'}</small>
+                                </div>
+                              ) : (
+                                <small className="text-muted">
+                                  <i className="fe fe-minus-circle me-1" style={{ opacity: 0.5 }}></i>
+                                  Sin categoría
+                                </small>
+                              )}
                             </td>
 
                             {/* Fecha */}
@@ -823,6 +912,27 @@ const Documentos = () => {
                       placeholder="Descripción breve del documento..."
                       maxLength={500}
                     />
+                  </Form.Group>
+                </Col>
+
+                <Col md={12} className="mb-3">
+                  <Form.Group>
+                    <Form.Label>Categoría <span className="text-danger">*</span></Form.Label>
+                    <Form.Select
+                      name="category_id"
+                      value={uploadFormData.category_id}
+                      onChange={handleUploadFormChange}
+                    >
+                      <option value="">Seleccionar categoría...</option>
+                      {categories.map(cat => (
+                        <option key={cat.category_id} value={cat.category_id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </Form.Select>
+                    <Form.Text className="text-muted">
+                      Selecciona la categoría que mejor describe este documento
+                    </Form.Text>
                   </Form.Group>
                 </Col>
               </Row>

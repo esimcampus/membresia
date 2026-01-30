@@ -4,8 +4,13 @@ import { Card, Form, Row, Col, Button, Image, Spinner, Toast } from 'react-boots
 import { DropFiles, FormSelect } from 'widgets';
 import { toTitleCase } from 'lib/textFormatters';
 import { supabase } from 'lib/supabaseClient';
+import { useActiveBranch } from 'context/ActiveBranchContext';
+import { logAudit } from 'lib/auditLog';
 
 const GeneralMiembro = () => {
+  const router = useRouter();
+  const { activeBranchId } = useActiveBranch(); // Obtener branch activo del contexto
+  const { branchId } = router.query; // ID de filial desde parámetro de URL
   // Estado del formulario
   const [formData, setFormData] = useState({
     first_name: '',
@@ -34,7 +39,6 @@ const GeneralMiembro = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const topRef = useRef(null);
-  const router = useRouter();
   const [toast, setToast] = useState({ show: false, message: '', variant: 'info' });
 
   const showToast = (message, variant = 'info') => {
@@ -44,15 +48,21 @@ const GeneralMiembro = () => {
   // Cargar datos de Supabase al montar el componente
   useEffect(() => {
     loadSupabaseData();
-  }, []);
+  }, [activeBranchId]);
 
   const loadSupabaseData = async () => {
     try {
-      // Cargar anexos
-      const { data: annexesData, error: annexesError } = await supabase
+      // Cargar anexos: si hay activeBranchId, filtrar por esa filial; si no, cargar todos
+      let annexesQuery = supabase
         .from('annexes')
         .select('annex_id, name')
         .order('name');
+      
+      if (activeBranchId) {
+        annexesQuery = annexesQuery.eq('branch_id', activeBranchId);
+      }
+
+      const { data: annexesData, error: annexesError } = await annexesQuery;
 
       if (annexesError) throw annexesError;
       
@@ -243,6 +253,18 @@ const GeneralMiembro = () => {
         setLoading(false);
         return;
       }
+
+      // Registrar en auditoría
+      await logAudit({
+        entityType: 'miembros',
+        entityId: data[0].member_id,
+        action: 'CREATE',
+        newValues: memberData,
+        description: `Nuevo miembro registrado: ${memberData.first_name} ${memberData.last_name}`,
+        branchId: activeBranchId,
+        annexId: memberData.annex_id,
+        sendEmail: true
+      });
 
       showSuccess('¡Miembro creado exitosamente!');
       

@@ -26,7 +26,7 @@ const SignIn = () => {
       return;
     }
     // Redirige a home tras login
-    router.push("/");
+    router.push("/pages/calendario");
   };
 
   return (

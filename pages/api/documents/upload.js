@@ -78,10 +78,15 @@ export default async function handler(req, res) {
 
     const branchId = fields.branchId?.[0] || fields.branchId;
     const annexId = fields.annexId?.[0] || fields.annexId || null;
+    const categoryId = fields.categoryId?.[0] || fields.categoryId;
     const description = fields.description?.[0] || fields.description || '';
 
     if (!branchId) {
       return res.status(400).json({ error: 'branch_id es requerido' });
+    }
+
+    if (!categoryId) {
+      return res.status(400).json({ error: 'category_id es requerido' });
     }
 
     // Validar tipo de archivo
@@ -152,6 +157,7 @@ export default async function handler(req, res) {
         description: description || null,
         branch_id: branchId,
         annex_id: annexId,
+        category_id: categoryId,
         uploaded_by: systemUser.member_id,
       })
       .select()

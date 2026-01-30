@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Modal, Form, Button, Row, Col } from 'react-bootstrap';
 import { supabase } from 'lib/supabaseClient';
+import { logAudit } from 'lib/auditLog';
 import { toTitleCase as toTitleCaseES } from 'lib/textFormatters';
 
 const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) => {
@@ -355,15 +356,42 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
         result = await supabase
           .from('annexes')
           .update(annexPayload)
-          .eq('annex_id', annexData.annex_id);
+          .eq('annex_id', annexData.annex_id)
+          .select()
+          .single();
       } else {
         // Crear
         result = await supabase
           .from('annexes')
-          .insert(annexPayload);
+          .insert(annexPayload)
+          .select()
+          .single();
       }
 
       if (result.error) throw result.error;
+
+      if (annexData) {
+        await logAudit({
+          entityType: 'anexos',
+          entityId: annexData.annex_id,
+          action: 'UPDATE',
+          oldValues: annexData,
+          newValues: annexPayload,
+          description: `Anexo actualizado: ${annexPayload.name}`,
+          branchId: branchId,
+          sendEmail: true
+        });
+      } else {
+        await logAudit({
+          entityType: 'anexos',
+          entityId: result.data?.annex_id,
+          action: 'CREATE',
+          newValues: annexPayload,
+          description: `Anexo creado: ${annexPayload.name}`,
+          branchId: branchId,
+          sendEmail: true
+        });
+      }
 
       alert(annexData ? 'Anexo actualizado correctamente' : 'Anexo creado correctamente');
       onSave();
@@ -396,6 +424,53 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
     setCityInput('');
     setIsCreatingNewState(false);
     setIsCreatingNewCity(false);
+  };
+
+  const handleDelete = async () => {
+    // Verificar si es la sede principal
+    if (formData.is_headquarters) {
+      alert('⚠️ No se puede eliminar la sede principal.\n\nPara eliminar este anexo debe:\n1. Asignar otro anexo como sede principal, O\n2. Eliminar toda la Filial');
+      return;
+    }
+
+    // Verificar si el anexo tiene miembros asignados
+    if (annexData?.members && annexData.members.length > 0) {
+      alert(`No se puede eliminar el anexo porque tiene ${annexData.members.length} miembro(s) asignado(s)`);
+      return;
+    }
+
+    if (!window.confirm('¿Está seguro de que desea eliminar este anexo?')) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('annexes')
+        .delete()
+        .eq('annex_id', annexData.annex_id);
+
+      if (error) throw error;
+
+      await logAudit({
+        entityType: 'anexos',
+        entityId: annexData.annex_id,
+        action: 'DELETE',
+        oldValues: annexData,
+        description: `Anexo eliminado: ${annexData.name || ''}`,
+        branchId: branchId,
+        sendEmail: true
+      });
+
+      alert('Anexo eliminado correctamente');
+      onSave();
+      handleClose();
+    } catch (error) {
+      console.error('Error eliminando anexo:', error);
+      alert('Error al eliminar el anexo: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleClose = () => {
@@ -632,6 +707,16 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
         </Form>
       </Modal.Body>
       <Modal.Footer>
+        {annexData && (
+          <Button 
+            variant="outline-danger" 
+            onClick={handleDelete}
+            className="me-auto"
+            disabled={saving}
+          >
+            Eliminar
+          </Button>
+        )}
         <Button variant="outline-secondary" onClick={handleClose}>
           Cancelar
         </Button>

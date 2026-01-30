@@ -3,8 +3,8 @@ import { v4 as uuid } from 'uuid';
 export const DashboardMenu = [
 	{
 		id: uuid(),
-		title: 'Inicio',
-		icon: 'home',
+		title: 'Estadísticas',
+		icon: 'bar-chart-2',
 		link: '/'
 	},
 	{
@@ -30,6 +30,13 @@ export const DashboardMenu = [
 		title: 'Documentos',
 		icon: 'folder',
 		link: '/pages/documentos'
+	},
+	{
+		id: uuid(),
+		title: 'Auditoría',
+		icon: 'eye',
+		link: '/pages/auditoria',
+		requiredRole: 2 // Solo Administradores (level >= 2) y Gestores (level >= 2)
 	},
 	// Los siguientes enlaces están comentados para uso futuro
 	/*

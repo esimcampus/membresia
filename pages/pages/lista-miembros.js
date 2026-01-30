@@ -14,13 +14,16 @@ const ListaMiembros = () => {
   const { activeBranchId, clearActiveBranch } = useActiveBranch();
   const effectiveId = useMemo(() => id || activeBranchId || null, [id, activeBranchId]);
   const [filtro, setFiltro] = useState("");
-  const [miembros, setMiembros] = useState([]);
+  const [miembrosBase, setMiembrosBase] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState({ show: false, message: '', variant: 'info' });
   const [isAdmin, setIsAdmin] = useState(false);
   const [roles, setRoles] = useState([]);
   const [savingMap, setSavingMap] = useState({}); // { [member_id]: boolean }
   const [branchFilter, setBranchFilter] = useState(null); // Info de la filial filtrada
+  const [annexes, setAnnexes] = useState([]);
+  const [selectedAnnexId, setSelectedAnnexId] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('Activo');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 50;
 
@@ -57,6 +60,24 @@ const ListaMiembros = () => {
     }
   }, []);
 
+  const loadAnnexes = useCallback(async (branchId) => {
+    if (!branchId) {
+      setAnnexes([]);
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from('annexes')
+        .select('annex_id, name, branch_id')
+        .eq('branch_id', branchId)
+        .order('name');
+      if (error) throw error;
+      setAnnexes(data || []);
+    } catch (e) {
+      console.error('Error cargando anexos:', e);
+    }
+  }, []);
+
   const loadMiembros = useCallback(async () => {
     setLoading(true);
     try {
@@ -89,18 +110,7 @@ const ListaMiembros = () => {
         showToast('Error al cargar la lista de miembros', 'danger');
         return;
       }
-
-      // Filtrar por filial si viene el parámetro id o contexto
-      let filteredData = data || [];
-      if (id) {
-        console.log('🔍 Filtrando miembros por filial (URL):', id);
-        filteredData = filteredData.filter(member => member.annexes?.branches?.branch_id === id);
-      } else if (activeBranchId) {
-        console.log('🔍 Filtrando miembros por filial (contexto):', activeBranchId);
-        filteredData = filteredData.filter(member => member.annexes?.branches?.branch_id === activeBranchId);
-      }
-
-      setMiembros(filteredData);
+      setMiembrosBase(data || []);
     } catch (err) {
       console.error('Error inesperado:', err);
       showToast('Error inesperado al cargar miembros', 'danger');
@@ -117,16 +127,29 @@ const ListaMiembros = () => {
       loadRoles();
       if (effectiveId) {
         loadBranchInfo(effectiveId);
+        loadAnnexes(effectiveId);
       } else {
         setBranchFilter(null);
+        setAnnexes([]);
+        setSelectedAnnexId('');
       }
     }
-  }, [router.isReady, effectiveId, loadMiembros, loadBranchInfo]);
+  }, [router.isReady, effectiveId, loadMiembros, loadBranchInfo, loadAnnexes]);
+
+  useEffect(() => {
+    setSelectedAnnexId('');
+  }, [effectiveId]);
+
+  useEffect(() => {
+    if (selectedAnnexId && !annexes.some(a => String(a.annex_id) === String(selectedAnnexId))) {
+      setSelectedAnnexId('');
+    }
+  }, [annexes, selectedAnnexId]);
 
   // Cambios de filtro o filial reinician paginación
   useEffect(() => {
     setCurrentPage(1);
-  }, [filtro, effectiveId]);
+  }, [filtro, effectiveId, selectedAnnexId, selectedStatus]);
 
   const checkAdmin = async () => {
     try {
@@ -165,8 +188,49 @@ const ListaMiembros = () => {
     }
   };
 
-  const miembrosFiltrados = miembros
-    .filter((m) => m.national_id !== '99999999') // Ocultar administrador central
+  const statusOptions = useMemo(() => {
+    const source = miembrosBase
+      .filter((m) => m.national_id !== '99999999')
+      .filter((m) => {
+        if (selectedAnnexId) return String(m.annexes?.annex_id) === String(selectedAnnexId);
+        if (effectiveId) return m.annexes?.branches?.branch_id === effectiveId;
+        return true;
+      })
+      .filter((m) => {
+        const texto = `${m.first_name} ${m.last_name} ${m.national_id} ${m.annexes?.name || ''} ${m.annexes?.branches?.name || ''}`.toLowerCase();
+        return texto.includes(filtro.toLowerCase());
+      });
+
+    const unique = new Set(source.map(m => m.member_statuses?.name).filter(Boolean));
+    unique.add('Activo');
+    return Array.from(unique).sort((a, b) => {
+      if (a === 'Activo') return -1;
+      if (b === 'Activo') return 1;
+      return a.localeCompare(b);
+    });
+  }, [miembrosBase, selectedAnnexId, effectiveId, filtro]);
+
+  useEffect(() => {
+    if (!selectedStatus) {
+      setSelectedStatus('Activo');
+    }
+  }, [statusOptions, selectedStatus]);
+
+  const miembrosFiltrados = miembrosBase
+    // Ocultar administrador central
+    .filter((m) => m.national_id !== '99999999')
+    // Filtro por estado
+    .filter((m) => {
+      if (!selectedStatus) return true;
+      return m.member_statuses?.name === selectedStatus;
+    })
+    // Filtro por anexo (prioridad) o filial
+    .filter((m) => {
+      if (selectedAnnexId) return String(m.annexes?.annex_id) === String(selectedAnnexId);
+      if (effectiveId) return m.annexes?.branches?.branch_id === effectiveId;
+      return true;
+    })
+    // Búsqueda por texto
     .filter((m) => {
       const texto = `${m.first_name} ${m.last_name} ${m.national_id} ${m.annexes?.name || ''} ${m.annexes?.branches?.name || ''}`.toLowerCase();
       return texto.includes(filtro.toLowerCase());
@@ -189,6 +253,40 @@ const ListaMiembros = () => {
       return roles.find(r => r.level === 4)?.role_name || 'Miembro Estándar';
     }
     return roles.find(r => r.role_id === m.system_users.role_id)?.role_name || '-';
+  };
+
+  const exportCsv = (rows, filename = 'miembros.csv') => {
+    if (!rows || rows.length === 0) {
+      showToast('No hay datos para exportar', 'warning');
+      return;
+    }
+    const headers = ['Nombre', 'DNI', 'Edad', 'Filial', 'Anexo', 'Teléfono', 'Nacionalidad', 'Estado'];
+    const csvRows = rows.map(m => {
+      const nombre = `${m.first_name} ${m.last_name}`.replace(/"/g, '""');
+      const filial = (m.annexes?.branches?.name || '').replace(/"/g, '""');
+      const anexo = (m.annexes?.name || '').replace(/"/g, '""');
+      const telefono = (m.phone || '').replace(/"/g, '""');
+      const nacionalidad = (m.countries?.name || '').replace(/"/g, '""');
+      const estado = (m.member_statuses?.name || '').replace(/"/g, '""');
+      return [
+        `"${nombre}"`,
+        `"${m.national_id || ''}"`,
+        `"${calculateAge(m.date_of_birth)}"`,
+        `"${filial}"`,
+        `"${anexo}"`,
+        `"${telefono}"`,
+        `"${nacionalidad}"`,
+        `"${estado}"`
+      ].join(',');
+    });
+    const csv = [headers.join(','), ...csvRows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleRoleChange = async (m, newRoleId) => {
@@ -313,28 +411,66 @@ const ListaMiembros = () => {
               </div>
               <p className="mb-0" style={{ color: "#4a5568" }}>
                 {branchFilter 
-                  ? `Miembros de la filial ${branchFilter.name} (todos los anexos)`
+                  ? `Miembros de la filial ${branchFilter.name}`
                   : 'Consulta y gestiona los miembros de todas las filiales.'
                 }
               </p>
             </div>
-            <div className="d-flex flex-column flex-md-row gap-2 mt-3 mt-md-0 w-100 w-md-auto align-items-center align-items-md-start">
-              <Form style={{ minWidth: 260, width: '100%', maxWidth: '400px' }}>
-                <InputGroup>
-                  <Form.Control
-                    type="text"
-                    placeholder="Buscar por nombre o DNI..."
-                    value={filtro}
-                    onChange={e => setFiltro(e.target.value)}
-                    style={{ borderRadius: "20px" }}
-                  />
-                </InputGroup>
-              </Form>
-              <Link href="/pages/miembro" passHref legacyBehavior>
-                <Button variant="primary" style={{ whiteSpace: 'nowrap', minWidth: '120px' }}>
-                  + Nuevo
+            <div className="d-flex flex-column gap-2 mt-3 mt-md-0 w-100 align-items-end">
+              {/* Primera fila: Búsqueda + Nuevo */}
+              <div className="d-flex flex-row gap-2 w-100 justify-content-end align-items-center">
+                <Form style={{ width: '100%', maxWidth: '320px' }}>
+                  <InputGroup>
+                    <Form.Control
+                      type="text"
+                      placeholder="Buscar por nombre o DNI..."
+                      value={filtro}
+                      onChange={e => setFiltro(e.target.value)}
+                      style={{ borderRadius: "20px" }}
+                    />
+                  </InputGroup>
+                </Form>
+                <Link href="/pages/miembro" passHref legacyBehavior>
+                  <Button variant="primary" style={{ whiteSpace: 'nowrap', minWidth: '120px' }}>
+                    + Nuevo
+                  </Button>
+                </Link>
+              </div>
+              {/* Segunda fila: Filtro estado + anexo + Excel */}
+              <div className="d-flex flex-row gap-2 w-100 justify-content-end align-items-center">
+                <Form style={{ width: '100%', maxWidth: '200px' }}>
+                  <Form.Select
+                    value={selectedStatus}
+                    onChange={(e) => setSelectedStatus(e.target.value)}
+                  >
+                    <option value="">Todos los estados</option>
+                    {statusOptions.map(status => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </Form.Select>
+                </Form>
+                <Form style={{ width: '100%', maxWidth: '280px' }}>
+                  <Form.Select
+                    value={selectedAnnexId}
+                    onChange={(e) => setSelectedAnnexId(e.target.value)}
+                  >
+                    <option value="">Todos los anexos</option>
+                    {annexes.map(a => (
+                      <option key={a.annex_id} value={a.annex_id}>{a.name}</option>
+                    ))}
+                  </Form.Select>
+                </Form>
+                <Button
+                  variant="outline-success"
+                  size="sm"
+                  className="d-inline-flex align-items-center justify-content-center"
+                  style={{ minWidth: '40px', height: '38px' }}
+                  onClick={() => exportCsv(miembrosFiltrados, 'miembros.xls')}
+                  title="Descargar Excel"
+                >
+                  <i className="fe fe-download" style={{ fontSize: '18px' }}></i>
                 </Button>
-              </Link>
+              </div>
             </div>
           </Card.Body>
         </Card>
@@ -362,7 +498,7 @@ const ListaMiembros = () => {
                   <th style={{ color: "#2a4365" }}>Estado</th>
                   {isAdmin && (<th style={{ color: "#2a4365" }}>Rol</th>)}
                 </tr>
-              </thead>
+         </thead>
               <tbody>
                 {pageItems.length === 0 ? (
                   <tr>

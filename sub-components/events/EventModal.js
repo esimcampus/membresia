@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Modal, Form, Button, Row, Col } from 'react-bootstrap';
 import { Trash } from 'react-bootstrap-icons';
 import { supabase } from 'lib/supabaseClient';
+import { logAudit } from 'lib/auditLog';
 
 const EventModal = ({ show, onHide, eventData, branches, userLevel, userBranches, onSave, showToast }) => {
     console.log('EventModal Props:', { 
@@ -188,6 +189,18 @@ const EventModal = ({ show, onHide, eventData, branches, userLevel, userBranches
                     .eq('event_id', eventData.event_id);
 
                 if (error) throw error;
+
+                await logAudit({
+                    entityType: 'calendario',
+                    entityId: eventData.event_id,
+                    action: 'UPDATE',
+                    oldValues: eventData,
+                    newValues: eventPayload,
+                    description: `Evento actualizado: ${eventPayload.name}`,
+                    branchId: eventPayload.branch_id,
+                    annexId: eventPayload.annex_id,
+                    sendEmail: true
+                });
             } else {
                 // Crear nuevo evento
                 const { data: { user } } = await supabase.auth.getUser();
@@ -205,11 +218,24 @@ const EventModal = ({ show, onHide, eventData, branches, userLevel, userBranches
                 
                 eventPayload.created_by = systemUser.member_id;
 
-                const { error } = await supabase
+                const { data: createdEvent, error } = await supabase
                     .from('events')
-                    .insert([eventPayload]);
+                    .insert([eventPayload])
+                    .select()
+                    .single();
 
                 if (error) throw error;
+
+                await logAudit({
+                    entityType: 'calendario',
+                    entityId: createdEvent?.event_id,
+                    action: 'CREATE',
+                    newValues: eventPayload,
+                    description: `Evento creado: ${eventPayload.name}`,
+                    branchId: eventPayload.branch_id,
+                    annexId: eventPayload.annex_id,
+                    sendEmail: true
+                });
             }
 
             onSave();
@@ -243,6 +269,17 @@ const EventModal = ({ show, onHide, eventData, branches, userLevel, userBranches
                 .eq('event_id', eventData.event_id);
 
             if (error) throw error;
+
+            await logAudit({
+                entityType: 'calendario',
+                entityId: eventData.event_id,
+                action: 'DELETE',
+                oldValues: eventData,
+                description: `Evento eliminado: ${eventData.name || ''}`,
+                branchId: eventData.branch_id,
+                annexId: eventData.annex_id,
+                sendEmail: true
+            });
             if (showToast) showToast('Evento eliminado', 'success');
             onSave();
             onHide();

@@ -40,13 +40,13 @@ const UnidadContribuciones = () => {
 					cities (
                         name,
                         zip_code
-),
-					members (
-member_id,
-first_name,
-last_name,
-avatar_url
-)
+                ),
+                    members (
+                        member_id,
+                        first_name,
+                        last_name,
+                        avatar_url
+                    )
 				`)
 				.eq('branch_id', id)
 				.eq('is_active', true)

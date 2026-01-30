@@ -4,10 +4,12 @@ import { useRouter } from "next/router";
 import Link from "next/link";
 import { Col, Row, Image, Modal, Form, Button } from "react-bootstrap";
 import { supabase } from "lib/supabaseClient";
+import { useActiveBranch } from "context/ActiveBranchContext";
 
 const UnidadHeader = () => {
   const router = useRouter();
   const { id } = router.query;
+  const { clearActiveBranch } = useActiveBranch();
   const [branch, setBranch] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -146,6 +148,7 @@ const UnidadHeader = () => {
       if (delErr) throw delErr;
 
       alert('Filial eliminada correctamente');
+      clearActiveBranch();
       setShowEditModal(false);
       router.push('/pages/unidad');
     } catch (e) {
