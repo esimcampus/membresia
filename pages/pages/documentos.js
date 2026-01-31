@@ -887,7 +887,7 @@ const Documentos = () => {
                       onChange={handleUploadFormChange}
                       disabled={!uploadFormData.branch_id}
                     >
-                      <option value="">Todo el branch</option>
+                      <option value="">Todas los anexos</option>
                       {annexes.map(annex => (
                         <option key={annex.annex_id} value={annex.annex_id}>
                           {annex.name} {annex.is_headquarters ? '(Sede Principal)' : ''}

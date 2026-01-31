@@ -111,7 +111,18 @@ const ListaMiembros = () => {
         showToast('Error al cargar la lista de miembros', 'danger');
         return;
       }
-      setMiembrosBase(data || []);
+      const sorted = (data || []).slice().sort((a, b) => {
+        const aAnnex = (a.annexes?.name || '').toLowerCase();
+        const bAnnex = (b.annexes?.name || '').toLowerCase();
+        if (aAnnex < bAnnex) return -1;
+        if (aAnnex > bAnnex) return 1;
+        const aLast = (a.last_name || '').toLowerCase();
+        const bLast = (b.last_name || '').toLowerCase();
+        if (aLast < bLast) return -1;
+        if (aLast > bLast) return 1;
+        return 0;
+      });
+      setMiembrosBase(sorted);
     } catch (err) {
       console.error('Error inesperado:', err);
       showToast('Error inesperado al cargar miembros', 'danger');
