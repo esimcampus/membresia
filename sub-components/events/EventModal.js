@@ -49,16 +49,25 @@ const EventModal = ({ show, onHide, eventData, branches, userLevel, userBranches
     }, [eventData, show]);
 
     const resetForm = () => {
-        setFormData({
+        const newFormData = {
             name: '',
             description: '',
             event_date: '',
             start_time: '',
             end_time: '',
-            branch_id: '',
+            // Auto-seleccionar filial del Gestor si solo tiene una asignada
+            branch_id: (userLevel === 2 && userBranches && userBranches.length === 1) ? userBranches[0] : '',
             annex_id: ''
-        });
-        setAnnexes([]);
+        };
+        setFormData(newFormData);
+        
+        // Si el Gestor tiene una sola filial, cargar sus anexos automáticamente
+        if (userLevel === 2 && userBranches && userBranches.length === 1) {
+            loadAnnexes(userBranches[0]);
+            console.log('✅ Gestor: Filial y anexos auto-seleccionados');
+        } else {
+            setAnnexes([]);
+        }
     };
 
     const loadAnnexes = async (branchId) => {
@@ -159,6 +168,17 @@ const EventModal = ({ show, onHide, eventData, branches, userLevel, userBranches
             if (showToast) showToast('Debe seleccionar una filial', 'danger');
             return;
         }
+
+        // Validar que los Gestores (level 2) solo creen eventos en sus filiales asignadas
+        if (userLevel === 2 && userBranches && !userBranches.includes(formData.branch_id)) {
+            if (showToast) showToast('Como Gestor solo puedes crear eventos en tu filial asignada', 'danger');
+            console.warn('❌ Gestor intentando crear evento en filial no asignada:', { 
+                branchId: formData.branch_id, 
+                userBranches 
+            });
+            return;
+        }
+
         if (formData.start_time && formData.end_time && formData.end_time < formData.start_time) {
             if (showToast) showToast('La hora de fin debe ser posterior a la hora de inicio', 'danger');
             return;
@@ -375,15 +395,25 @@ const EventModal = ({ show, onHide, eventData, branches, userLevel, userBranches
                                     value={formData.branch_id}
                                     onChange={handleChange}
                                     onBlur={checkDuplicateEvents}
+                                    disabled={userLevel === 2 && userBranches && userBranches.length > 0}
                                 >
                                     <option value="">Seleccionar filial...</option>
-                                    {console.log('Rendering branches in select:', branches)}
+                                    {console.log('Rendering branches in select:', branches, 'userLevel:', userLevel, 'userBranches:', userBranches)}
                                     {branches && branches.length > 0 ? (
-                                        branches.map(branch => (
-                                            <option key={branch.branch_id} value={branch.branch_id}>
-                                                {branch.name}
-                                            </option>
-                                        ))
+                                        branches
+                                            .filter(branch => {
+                                                // Si es Gestor (level 2), mostrar solo sus filiales asignadas
+                                                if (userLevel === 2 && userBranches && userBranches.length > 0) {
+                                                    return userBranches.includes(branch.branch_id);
+                                                }
+                                                // Si es Admin, mostrar todas
+                                                return true;
+                                            })
+                                            .map(branch => (
+                                                <option key={branch.branch_id} value={branch.branch_id}>
+                                                    {branch.name}
+                                                </option>
+                                            ))
                                     ) : (
                                         <option value="" disabled>No hay filiales disponibles</option>
                                     )}
@@ -391,6 +421,11 @@ const EventModal = ({ show, onHide, eventData, branches, userLevel, userBranches
                                 {(!branches || branches.length === 0) && (
                                     <Form.Text className="text-danger">
                                         No se cargaron las filiales
+                                    </Form.Text>
+                                )}
+                                {userLevel === 2 && userBranches && userBranches.length > 0 && (
+                                    <Form.Text className="text-muted">
+                                        Como Gestor, solo puedes crear eventos en tu filial asignada
                                     </Form.Text>
                                 )}
                             </Form.Group>

@@ -7,6 +7,7 @@ import { useRouter } from 'next/router';
 import { supabase } from 'lib/supabaseClient';
 import { toTitleCase } from 'lib/textFormatters';
 import { logAudit } from 'lib/auditLog';
+import { useUserPermissions } from 'hooks/useUserPermissions';
 
 // import widget as custom components
 import { PageHeading } from 'widgets'
@@ -23,6 +24,7 @@ import {
 const Profile = () => {
   const router = useRouter();
   const { id } = router.query;
+  const { isManager, memberBranchId, loading: permLoading } = useUserPermissions();
   const [branches, setBranches] = useState([]);
   const [zones, setZones] = useState([]);
   const [selectedZone, setSelectedZone] = useState('');
@@ -32,6 +34,37 @@ const Profile = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [unauthorizedAccess, setUnauthorizedAccess] = useState(false);
+  
+  // Validación: Gestor intentando acceder a filial diferente a la suya
+  useEffect(() => {
+    if (!permLoading && isManager && memberBranchId && id) {
+      if (String(id) !== String(memberBranchId)) {
+        console.warn('⛔ Gestor intentando acceder a filial no asignada:', { id, memberBranchId });
+        setUnauthorizedAccess(true);
+      } else {
+        setUnauthorizedAccess(false);
+      }
+    }
+  }, [isManager, memberBranchId, id, permLoading]);
+
+  // Forzar que Managers vean solo su filial
+  useEffect(() => {
+    if (isManager && memberBranchId && !id) {
+      router.push(`/pages/unidad?id=${memberBranchId}`, undefined, { shallow: true });
+    }
+  }, [isManager, memberBranchId, id, router]);
+
+  // Redirigir automáticamente si intenta acceder a filial no autorizada
+  useEffect(() => {
+    if (unauthorizedAccess && isManager && memberBranchId) {
+      const timer = setTimeout(() => {
+        console.log('🔄 Redirigiendo a filial autorizada:', memberBranchId);
+        router.push(`/pages/unidad?id=${memberBranchId}`, undefined, { shallow: true });
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [unauthorizedAccess, isManager, memberBranchId, router]);
   
   // Datos del formulario
   const [formData, setFormData] = useState({
@@ -132,10 +165,17 @@ const Profile = () => {
 
   const loadBranches = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('branches')
         .select('branch_id, name, zone_id, zones(name)')
         .order('name');
+      
+      // Si es Manager, solo cargar su filial
+      if (isManager && memberBranchId) {
+        query = query.eq('branch_id', memberBranchId);
+      }
+      
+      const { data, error } = await query;
       
       if (error) throw error;
       setBranches(data || []);
@@ -204,6 +244,12 @@ const Profile = () => {
   };
 
   const handleBranchSelectChange = (option) => {
+    // Gestores (role_id 2) no pueden cambiar de filial
+    if (isManager && memberBranchId) {
+      console.warn('❌ Gestor intentando cambiar de filial. Solo puede ver su filial asignada');
+      return;
+    }
+
     const branchId = option ? String(option.value) : '';
     setSelectedBranch(branchId);
     if (branchId) {
@@ -618,6 +664,32 @@ const Profile = () => {
 
   return (
     <Container fluid className="p-6">
+      {/* Control de acceso no autorizado para Gestores */}
+      {unauthorizedAccess && (
+        <Row className="mb-4">
+          <Col lg={12}>
+            <div className="alert alert-danger d-flex align-items-center" role="alert">
+              <div>
+                <h4 className="alert-heading mb-2">
+                  <i className="fe fe-alert-circle me-2"></i>Acceso No Autorizado
+                </h4>
+                <p className="mb-0">
+                  No eres Gestor de esta filial. Como Gestor, solo puedes acceder a tu filial asignada.
+                </p>
+                <p className="mb-0 mt-2">
+                  <small className="text-muted">
+                    Serás redirigido a tu filial asignada en 3 segundos...
+                  </small>
+                </p>
+              </div>
+            </div>
+          </Col>
+        </Row>
+      )}
+
+      {/* Mostrar contenido solo si no hay acceso no autorizado */}
+      {!unauthorizedAccess && (
+        <>
       {/* Encabezado de la página */}
       <PageHeading heading="Resumen de la Filial"/>
 
@@ -627,29 +699,46 @@ const Profile = () => {
           <Select
             classNamePrefix="select"
             placeholder="Filtrar por zona..."
-            isClearable
-            isDisabled={loading}
+            isClearable={!isManager}
+            isDisabled={loading || isManager}
             isLoading={loading}
             options={zones.map(z => ({ value: String(z.zone_id), label: z.name }))}
             value={selectedZone ? { value: String(selectedZone), label: (zones.find(z => String(z.zone_id) === String(selectedZone))?.name) || '' } : null}
             onChange={handleZoneSelectChange}
             noOptionsMessage={({ inputValue }) => inputValue ? `Sin resultados para "${inputValue}"` : 'Sin zonas'}
           />
+          {isManager && memberBranchId && (
+            <Form.Text className="text-muted d-block mt-2">
+              <i className="fe fe-lock me-1"></i>Los Gestores no pueden filtrar por zona
+            </Form.Text>
+          )}
         </Col>
         <Col md={4} className="mb-3 mb-md-0">
           <Select
             classNamePrefix="select"
             placeholder="Seleccione o busque una filial..."
-            isClearable
-            isDisabled={loading}
+            isClearable={!isManager}
+            isDisabled={loading || isManager}
             isLoading={loading}
             options={branches
-              .filter(b => !selectedZone || String(b.zone_id) === String(selectedZone))
+              .filter(b => {
+                // Gestores solo ven su filial asignada
+                if (isManager && memberBranchId) {
+                  return String(b.branch_id) === String(memberBranchId);
+                }
+                // Admins ven todas, filtradas opcionalmente por zona
+                return !selectedZone || String(b.zone_id) === String(selectedZone);
+              })
               .map(b => ({ value: String(b.branch_id), label: b.name }))}
             value={selectedBranch ? { value: String(selectedBranch), label: (branches.find(b => String(b.branch_id) === String(selectedBranch))?.name) || '' } : null}
             onChange={handleBranchSelectChange}
             noOptionsMessage={({ inputValue }) => inputValue ? `Sin resultados para "${inputValue}"` : 'Escribe para buscar'}
           />
+          {isManager && memberBranchId && (
+            <Form.Text className="text-muted d-block mt-2">
+              <i className="fe fe-lock me-1"></i>Como Gestor, solo ves tu filial asignada
+            </Form.Text>
+          )}
           {isAdmin && activeBranchId && (
             <Button variant="outline-secondary" size="sm" className="mt-2" onClick={() => handleBranchSelectChange(null)}>
               Quitar filtro de Filial
@@ -657,16 +746,23 @@ const Profile = () => {
           )}
         </Col>
         <Col md={4} className="d-flex align-items-end justify-content-center justify-content-md-end">
-          <Button 
-            variant="primary" 
-            onClick={() => {
-              setFormData(prev => ({ ...prev, branchZoneId: selectedZone || '' }));
-              setShowModal(true);
-            }}
-            className="mt-3 mt-md-0"
-          >
-            Nueva Filial
-          </Button>
+          {!isManager && (
+            <Button 
+              variant="primary" 
+              onClick={() => {
+                setFormData(prev => ({ ...prev, branchZoneId: selectedZone || '' }));
+                setShowModal(true);
+              }}
+              className="mt-3 mt-md-0"
+            >
+              Nueva Filial
+            </Button>
+          )}
+          {isManager && (
+            <span className="text-muted text-sm">
+              <i className="fe fe-lock me-2"></i>Los Gestores no pueden crear filiales
+            </span>
+          )}
         </Col>
       </Row>
 
@@ -982,6 +1078,8 @@ const Profile = () => {
             </Row>
           </div>
         </>
+      )}
+      </>
       )}
     </Container>
   )

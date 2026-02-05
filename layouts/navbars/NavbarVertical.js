@@ -1,5 +1,5 @@
 // import node module libraries
-import { Fragment, useContext } from "react";
+import { Fragment, useContext, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useMediaQuery } from "react-responsive";
@@ -22,6 +22,22 @@ import { DashboardMenu } from "routes/DashboardRoutes";
 
 const NavbarVertical = (props) => {
   const location = useRouter();
+  const [loadingLink, setLoadingLink] = useState(null);
+
+  // Limpiar estado de loading cuando la navegación se complete
+  useEffect(() => {
+    const handleRouteChange = () => {
+      setLoadingLink(null);
+    };
+
+    location.events.on('routeChangeComplete', handleRouteChange);
+    location.events.on('routeChangeError', handleRouteChange);
+
+    return () => {
+      location.events.off('routeChangeComplete', handleRouteChange);
+      location.events.off('routeChangeError', handleRouteChange);
+    };
+  }, [location]);
 
   const CustomToggle = ({ children, eventKey, icon }) => {
     const { activeEventKey } = useContext(AccordionContext);
@@ -68,20 +84,34 @@ const NavbarVertical = (props) => {
   };
 
   const generateLink = (item) => {
+    const isLoading = loadingLink === item.link;
     return (
       <Link
         href={item.link}
         className={`nav-link ${
           location.pathname === item.link ? "active" : ""
-        }`}
-        onClick={() => {
+        } ${isLoading ? "disabled" : ""}`}
+        onClick={(e) => {
+          if (isLoading) {
+            e.preventDefault();
+            return;
+          }
+          setLoadingLink(item.link);
           if (isMobile) {
             // En mobile, al hacer click en un enlace, siempre ocultamos el menú
             props.onClick(false);
           }
         }}
+        style={{
+          opacity: isLoading ? 0.7 : 1,
+          pointerEvents: isLoading ? 'none' : 'auto',
+          position: 'relative'
+        }}
       >
-        {item.name}
+        <span style={{ fontStyle: isLoading ? 'italic' : 'normal' }}>
+          {item.name}
+          {isLoading && '...'}
+        </span>
         {""}
         {item.badge ? (
           <Badge
@@ -304,6 +334,7 @@ const NavbarVertical = (props) => {
                   </Fragment>
                 );
               } else {
+                const isLoading = loadingLink === menu.link;
                 return (
                   <Card bsPrefix="nav-item" key={index}>
                     {/* menu item without any childern items like Documentation and Changelog items*/}
@@ -311,15 +342,30 @@ const NavbarVertical = (props) => {
                       href={menu.link}
                       className={`nav-link ${
                         location.pathname === menu.link ? "active" : ""
-                      }`}
-                      onClick={() => { if (isMobile) props.onClick(false); }}
+                      } ${isLoading ? "disabled" : ""}`}
+                      onClick={(e) => {
+                        if (isLoading) {
+                          e.preventDefault();
+                          return;
+                        }
+                        setLoadingLink(menu.link);
+                        if (isMobile) props.onClick(false);
+                      }}
+                      style={{
+                        opacity: isLoading ? 0.7 : 1,
+                        pointerEvents: isLoading ? 'none' : 'auto',
+                        position: 'relative'
+                      }}
                     >
                       {typeof menu.icon === "string" ? (
                         <i className={`nav-icon fe fe-${menu.icon} me-2`}></i>
                       ) : (
                         menu.icon
                       )}
-                      {menu.title}
+                      <span style={{ fontStyle: isLoading ? 'italic' : 'normal' }}>
+                        {menu.title}
+                        {isLoading && '...'}
+                      </span>
                       {menu.badge ? (
                         <Badge
                           className="ms-1"
@@ -339,6 +385,16 @@ const NavbarVertical = (props) => {
           })}
         </Accordion>
         {/* end of Dashboard Menu */}
+        <style jsx>{`
+          .nav-link.disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
+          }
+          
+          .nav-link {
+            transition: opacity 0.2s ease-in-out;
+          }
+        `}</style>
       </SimpleBar>
     </Fragment>
   );

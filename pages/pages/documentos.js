@@ -8,12 +8,19 @@ import { supabase } from 'lib/supabaseClient';
 import Link from 'next/link';
 import { useActiveBranch } from 'context/ActiveBranchContext';
 import { logAudit } from 'lib/auditLog';
+import { useUserPermissions } from 'hooks/useUserPermissions';
 
 const Documentos = () => {
   const router = useRouter();
   const { id } = router.query; // ID de la filial desde URL (opcional)
   const { activeBranchId, clearActiveBranch } = useActiveBranch();
-  const effectiveId = useMemo(() => id || activeBranchId || null, [id, activeBranchId]);
+  const { isManager, memberBranchId, loading: permLoading } = useUserPermissions();
+  
+  // Si es Manager, forzar que vea solo su filial
+  const effectiveId = useMemo(() => {
+    if (isManager && memberBranchId) return String(memberBranchId);
+    return id || activeBranchId || null;
+  }, [id, activeBranchId, isManager, memberBranchId]);
   
   const [filtro, setFiltro] = useState("");
   const [documentos, setDocumentos] = useState([]);
@@ -229,6 +236,16 @@ const Documentos = () => {
         `)
         .order('created_at', { ascending: false });
 
+      // Aplicar filtro en la query directamente (no en JavaScript)
+      if (effectiveId) {
+        console.log('🔍 Filtrando documentos por filial en query:', effectiveId);
+        query = query.eq('branch_id', effectiveId);
+      } else if (isManager && memberBranchId) {
+        // Gestor sin effectiveId explícito pero con memberBranchId
+        console.log('🔍 Filtrando documentos por filial del gestor:', memberBranchId);
+        query = query.eq('branch_id', memberBranchId);
+      }
+
       const { data, error } = await query;
 
       if (error) {
@@ -237,32 +254,15 @@ const Documentos = () => {
         return;
       }
 
-      let filteredData = data || [];
-
-      // Filtrar por filial si viene parámetro id, contexto activo o si es Gestor
-      if (id) {
-        console.log('🔍 Filtrando documentos por filial (URL):', id);
-        filteredData = filteredData.filter(doc => doc.branches?.branch_id === id);
-      } else if (activeBranchId) {
-        console.log('🔍 Filtrando documentos por filial (contexto):', activeBranchId);
-        filteredData = filteredData.filter(doc => doc.branches?.branch_id === activeBranchId);
-      } else if (userLevel === 2 && userBranches.length > 0) {
-        console.log('🔍 Filtrando documentos por filiales del gestor');
-        filteredData = filteredData.filter(doc => 
-          userBranches.includes(doc.branches?.branch_id)
-        );
-      }
-
-      console.log('✅ Documentos cargados:', filteredData.length);
-      console.log('📦 Primer documento (debug):', filteredData[0]);
-      setDocumentos(filteredData);
+      console.log('✅ Documentos cargados:', data?.length || 0);
+      setDocumentos(data || []);
     } catch (err) {
       console.error('Error inesperado:', err);
       showToast('Error inesperado al cargar documentos', 'danger');
     } finally {
       setLoading(false);
     }
-  }, [id, activeBranchId, userLevel, userBranches]);
+  }, [effectiveId, isManager, memberBranchId]);
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -272,18 +272,27 @@ const Documentos = () => {
       loadDocumentCategories();
       if (effectiveId) {
         loadBranchInfo(effectiveId);
+        loadDocumentos();
       } else {
         setBranchFilter(null);
+        setDocumentos([]);
       }
     }
-  }, [router.isReady, effectiveId, loadBranchInfo, loadDocumentCategories]);
+  }, [router.isReady, effectiveId, loadBranchInfo, loadDocumentCategories, loadDocumentos]);
 
   const loadBranches = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('branches')
         .select('branch_id, name')
         .order('name');
+      
+      // Si es Manager, solo cargar su filial
+      if (isManager && memberBranchId) {
+        query = query.eq('branch_id', memberBranchId);
+      }
+      
+      const { data, error } = await query;
       
       if (error) throw error;
       setBranches(data || []);
@@ -345,6 +354,13 @@ const Documentos = () => {
       showToast('Por favor selecciona una filial', 'warning');
       return;
     }
+    
+    // Validar que Manager solo suba a su filial
+    if (isManager && String(uploadFormData.branch_id) !== String(memberBranchId)) {
+      showToast('Como Gestor solo puedes subir documentos a tu filial asignada', 'danger');
+      return;
+    }
+    
     if (!uploadFormData.category_id) {
       showToast('Por favor selecciona una categoría', 'warning');
       return;
@@ -553,25 +569,27 @@ const Documentos = () => {
                       <i className="fe fe-filter me-1"></i>
                       {branchFilter.name}
                     </Badge>
-                    <Button
-                      variant="outline-secondary"
-                      size="sm"
-                      onClick={() => {
-                        setBranchFilter(null);
-                        if (id) {
-                          router.push('/pages/documentos', undefined, { shallow: true });
-                        } else if (activeBranchId) {
-                          clearActiveBranch();
-                        }
-                      }}
-                      style={{ 
-                        whiteSpace: 'nowrap',
-                        padding: '0.25rem 0.5rem',
-                        fontSize: '0.85rem'
-                      }}
-                    >
-                      <i className="fe fe-x" style={{ fontSize: '0.75rem' }}></i>
-                    </Button>
+                    {!isManager && (
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={() => {
+                          setBranchFilter(null);
+                          if (id) {
+                            router.push('/pages/documentos', undefined, { shallow: true });
+                          } else if (activeBranchId) {
+                            clearActiveBranch();
+                          }
+                        }}
+                        style={{ 
+                          whiteSpace: 'nowrap',
+                          padding: '0.25rem 0.5rem',
+                          fontSize: '0.85rem'
+                        }}
+                      >
+                        <i className="fe fe-x" style={{ fontSize: '0.75rem' }}></i>
+                      </Button>
+                    )}
                   </>
                 )}
               </div>

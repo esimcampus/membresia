@@ -8,12 +8,18 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useActiveBranch } from 'context/ActiveBranchContext';
 import { logAudit } from 'lib/auditLog';
+import { useUserPermissions } from 'hooks/useUserPermissions';
 
 const ListaMiembros = () => {
   const router = useRouter();
   const { id } = router.query; // ID de la filial desde URL
   const { activeBranchId, clearActiveBranch } = useActiveBranch();
-  const effectiveId = useMemo(() => id || activeBranchId || null, [id, activeBranchId]);
+  const { isManager, memberBranchId, loading: permLoading } = useUserPermissions();
+  // Si es Manager, forzar que vea solo su filial
+  const effectiveId = useMemo(() => {
+    if (isManager && memberBranchId) return String(memberBranchId);
+    return id || activeBranchId || null;
+  }, [id, activeBranchId, isManager, memberBranchId]);
   const [filtro, setFiltro] = useState("");
   const [miembrosBase, setMiembrosBase] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +33,15 @@ const ListaMiembros = () => {
   const [selectedStatus, setSelectedStatus] = useState('Activo');
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 50;
+
+  // Si Manager y aún no tiene ID efectivo cargado, mostrar spinner
+  useEffect(() => {
+    if (isManager && !memberBranchId && !permLoading) {
+      // Forzar redirección si no tiene filial asignada
+      showToast('No tienes una filial asignada', 'danger');
+      router.push('/pages/calendario');
+    }
+  }, [isManager, memberBranchId, permLoading]);
 
   const showToast = (message, variant = 'info') => {
     setToast({ show: true, message, variant });
@@ -104,6 +119,7 @@ const ListaMiembros = () => {
         `)
         .order('last_name', { ascending: true });
 
+      // NO filtrar aquí - solo obtener datos base
       const { data, error } = await query;
 
       if (error) {
@@ -111,7 +127,17 @@ const ListaMiembros = () => {
         showToast('Error al cargar la lista de miembros', 'danger');
         return;
       }
-      const sorted = (data || []).slice().sort((a, b) => {
+
+      // Filtrar en JavaScript POR FILIAL si effectiveId existe
+      let filteredData = data || [];
+      if (effectiveId) {
+        console.log('🔍 Filtrando miembros por filial:', effectiveId);
+        filteredData = filteredData.filter(m => 
+          String(m.annexes?.branches?.branch_id) === String(effectiveId)
+        );
+      }
+
+      const sorted = filteredData.slice().sort((a, b) => {
         const aAnnex = (a.annexes?.name || '').toLowerCase();
         const bAnnex = (b.annexes?.name || '').toLowerCase();
         if (aAnnex < bAnnex) return -1;
@@ -122,6 +148,8 @@ const ListaMiembros = () => {
         if (aLast > bLast) return 1;
         return 0;
       });
+      
+      console.log('✅ Miembros cargados y filtrados:', sorted.length);
       setMiembrosBase(sorted);
     } catch (err) {
       console.error('Error inesperado:', err);
@@ -129,7 +157,7 @@ const ListaMiembros = () => {
     } finally {
       setLoading(false);
     }
-  }, [id, activeBranchId]);
+  }, [effectiveId]);
 
   // Cargar miembros desde Supabase
   useEffect(() => {
@@ -147,6 +175,14 @@ const ListaMiembros = () => {
       }
     }
   }, [router.isReady, effectiveId, loadMiembros, loadBranchInfo, loadAnnexes]);
+
+  // Si es Manager sin ID efectivo y tiene permiso cargado, forzar redirección
+  useEffect(() => {
+    if (!permLoading && isManager && !memberBranchId && router.isReady) {
+      showToast('No tienes una filial asignada como Gestor', 'danger');
+      router.push('/pages/calendario');
+    }
+  }, [permLoading, isManager, memberBranchId, router.isReady]);
 
   useEffect(() => {
     setSelectedAnnexId('');
@@ -418,25 +454,27 @@ const ListaMiembros = () => {
                       <i className="fe fe-filter me-1"></i>
                       {branchFilter.name}
                     </Badge>
-                    <Button
-                      variant="outline-secondary"
-                      size="sm"
-                      onClick={() => {
-                        setBranchFilter(null);
-                        if (id) {
-                          router.push('/pages/lista-miembros', undefined, { shallow: true });
-                        } else if (activeBranchId) {
-                          clearActiveBranch();
-                        }
-                      }}
-                      style={{ 
-                        whiteSpace: 'nowrap',
-                        padding: '0.25rem 0.5rem',
-                        fontSize: '0.85rem'
-                      }}
-                    >
-                      <i className="fe fe-x" style={{ fontSize: '0.75rem' }}></i>
-                    </Button>
+                    {!isManager && (
+                      <Button
+                        variant="outline-secondary"
+                        size="sm"
+                        onClick={() => {
+                          setBranchFilter(null);
+                          if (id) {
+                            router.push('/pages/lista-miembros', undefined, { shallow: true });
+                          } else if (activeBranchId) {
+                            clearActiveBranch();
+                          }
+                        }}
+                        style={{ 
+                          whiteSpace: 'nowrap',
+                          padding: '0.25rem 0.5rem',
+                          fontSize: '0.85rem'
+                        }}
+                      >
+                        <i className="fe fe-x" style={{ fontSize: '0.75rem' }}></i>
+                      </Button>
+                    )}
                   </>
                 )}
               </div>

@@ -4,16 +4,22 @@ import { Modal, Form, Button, Row, Col } from 'react-bootstrap';
 import { supabase } from 'lib/supabaseClient';
 import { logAudit } from 'lib/auditLog';
 import { toTitleCase as toTitleCaseES } from 'lib/textFormatters';
+import { useUserPermissions } from 'hooks/useUserPermissions';
 
 const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) => {
+  const { isManager } = useUserPermissions();
   const [saving, setSaving] = useState(false);
   const [countries, setCountries] = useState([]);
   const [states, setStates] = useState([]);
   const [cities, setCities] = useState([]);
+  const [zones, setZones] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [selectedCountryId, setSelectedCountryId] = useState('');
   const [countryName, setCountryName] = useState('');
   const [selectedStateId, setSelectedStateId] = useState('');
   const [selectedCityId, setSelectedCityId] = useState('');
+  const [selectedZoneId, setSelectedZoneId] = useState('');
+  const [selectedBranchId, setSelectedBranchId] = useState('');
   const [stateInput, setStateInput] = useState('');
   const [cityInput, setCityInput] = useState('');
   const [isCreatingNewState, setIsCreatingNewState] = useState(false);
@@ -31,24 +37,62 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
 
   useEffect(() => {
     loadCountries();
+    loadZones();
   }, []);
+
+  // Recargar zonas cuando el modal se abre (para asegurar que están disponibles)
+  useEffect(() => {
+    if (show) {
+      console.log('📂 Modal abierto, recargando datos... branchId:', branchId);
+      loadZones();
+      loadCountries();
+      
+      // Si no estamos editando, recargamos los datos de la rama
+      if (!annexData && branchId) {
+        console.log('🔄 Recargando datos de rama en apertura del modal');
+        loadBranchDataOnOpen();
+      }
+    }
+  }, [show]);
 
   // Cargar país de la filial (branch) y fijarlo como no editable
   useEffect(() => {
     const loadBranchCountry = async () => {
-      if (!branchId) return;
+      if (!branchId) {
+        console.log('⚠️ No hay branchId');
+        return;
+      }
       try {
+        console.log('📥 Cargando datos de branch:', branchId);
         const { data, error } = await supabase
           .from('branches')
-          .select('country_id, countries(name)')
+          .select('country_id, zone_id, countries(name)')
           .eq('branch_id', branchId)
           .single();
-        if (!error && data) {
+        
+        if (error) {
+          console.error('Error en la query:', error);
+          return;
+        }
+        
+        if (data) {
+          console.log('✅ Datos de branch cargados:', data);
           setSelectedCountryId(data.country_id);
-          setCountryName(data?.countries?.name || '');
+          // Establecer directamente el nombre del país desde la relación
+          if (data.countries) {
+            setCountryName(data.countries.name);
+            console.log('✅ País seteado desde branch:', data.countries.name);
+          }
+          setSelectedBranchId(branchId);
+          setSelectedZoneId(data.zone_id || '');
+          // Cargar filiales de la zona
+          if (data.zone_id) {
+            console.log('📥 Cargando filiales para zone:', data.zone_id);
+            await loadBranches(data.zone_id);
+          }
         }
       } catch (e) {
-        console.error('Error obteniendo país de la filial:', e);
+        console.error('Error obteniendo datos de la filial:', e);
       }
     };
     loadBranchCountry();
@@ -72,11 +116,16 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
         // Cargar datos de ubicación
         loadLocationData(annexData.city_id);
       }
+      
+      // Cargar branch actual del anexo
+      loadAnnexBranch(annexData.annex_id);
     } else {
       // Modo crear - resetear
       resetForm();
+      // En modo crear, la zona y branch se cargan de la prop branchId
+      setSelectedBranchId(branchId || '');
     }
-  }, [annexData, show]);
+  }, [annexData, show, branchId]);
 
   useEffect(() => {
     if (selectedCountryId) {
@@ -99,6 +148,24 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
       setIsCreatingNewCity(false);
     }
   }, [selectedStateId]);
+
+  useEffect(() => {
+    if (selectedZoneId && annexData) {
+      loadBranches(selectedZoneId);
+    }
+  }, [selectedZoneId, annexData]);
+
+  // Actualizar el nombre del país cuando cambia selectedCountryId (fallback)
+  useEffect(() => {
+    console.log('🔄 Efecto fallback. selectedCountryId:', selectedCountryId, 'countryName:', countryName);
+    if (selectedCountryId && !countryName && countries.length > 0) {
+      const country = countries.find(c => c.country_id === selectedCountryId);
+      if (country) {
+        setCountryName(country.name);
+        console.log('✅ País actualizado desde fallback:', country.name);
+      }
+    }
+  }, [selectedCountryId, countries, countryName]);
 
   const loadLocationData = async (cityId) => {
     try {
@@ -123,6 +190,42 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
       }
     } catch (e) {
       console.error('Error cargando datos de ubicación:', e);
+    }
+  };
+
+  const loadBranchDataOnOpen = async () => {
+    if (!branchId) return;
+    try {
+      console.log('📥 Cargando datos de branch en apertura:', branchId);
+      const { data, error } = await supabase
+        .from('branches')
+        .select('country_id, zone_id, countries(name)')
+        .eq('branch_id', branchId)
+        .single();
+      
+      if (error) {
+        console.error('Error en la query:', error);
+        return;
+      }
+      
+      if (data) {
+        console.log('✅ Datos de branch en apertura cargados:', data);
+        setSelectedCountryId(data.country_id);
+        // Establecer directamente el nombre del país desde la relación
+        if (data.countries) {
+          setCountryName(data.countries.name);
+          console.log('✅ País seteado en apertura:', data.countries.name);
+        }
+        setSelectedBranchId(branchId);
+        setSelectedZoneId(data.zone_id || '');
+        // Cargar filiales de la zona
+        if (data.zone_id) {
+          console.log('📥 Cargando filiales para zone:', data.zone_id);
+          await loadBranches(data.zone_id);
+        }
+      }
+    } catch (e) {
+      console.error('Error obteniendo datos de la filial en apertura:', e);
     }
   };
 
@@ -170,6 +273,55 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
     }
   };
 
+  const loadZones = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('zones')
+        .select('zone_id, name')
+        .order('name');
+      
+      if (error) throw error;
+      console.log('✅ Zonas cargadas:', data);
+      setZones(data || []);
+    } catch (e) {
+      console.error('Error cargando zonas:', e);
+    }
+  };
+
+  const loadBranches = async (zoneId) => {
+    try {
+      const { data, error } = await supabase
+        .from('branches')
+        .select('branch_id, name')
+        .eq('zone_id', zoneId)
+        .order('name');
+      
+      if (error) throw error;
+      console.log('✅ Filiales cargadas para zona:', zoneId, data);
+      setBranches(data || []);
+    } catch (e) {
+      console.error('Error cargando filiales:', e);
+    }
+  };
+
+  const loadAnnexBranch = async (annexId) => {
+    try {
+      const { data, error } = await supabase
+        .from('annexes')
+        .select('branch_id, branches(zone_id)')
+        .eq('annex_id', annexId)
+        .single();
+      
+      if (!error && data && data.branches) {
+        setSelectedBranchId(data.branch_id);
+        setSelectedZoneId(data.branches.zone_id);
+        await loadBranches(data.branches.zone_id);
+      }
+    } catch (e) {
+      console.error('Error cargando filial del anexo:', e);
+    }
+  }
+
   const toTitleCase = (str) => {
     return str
       .toLowerCase()
@@ -196,6 +348,23 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
 
   // País fijo por filial: no permitimos cambiarlo
   const handleCountryChange = () => {};
+
+  const handleZoneChange = (e) => {
+    const zoneId = e.target.value;
+    console.log('🔄 Zona seleccionada:', zoneId);
+    setSelectedZoneId(zoneId);
+    setSelectedBranchId('');
+    if (zoneId) {
+      console.log('📥 Llamando a loadBranches...');
+      loadBranches(zoneId);
+    } else {
+      setBranches([]);
+    }
+  };
+
+  const handleBranchChange = (e) => {
+    setSelectedBranchId(e.target.value);
+  };
 
   const handleStateChange = (e) => {
     const value = e.target.value;
@@ -311,6 +480,14 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
       return;
     }
 
+    if (annexData && !selectedBranchId) {
+      alert('Por favor seleccione una filial');
+      return;
+    }
+
+    // Usar selectedBranchId si se está editando, sino usar branchId
+    const finalBranchId = annexData ? selectedBranchId : branchId;
+
     setSaving(true);
     try {
       // Crear estado si es necesario
@@ -339,10 +516,10 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
       }
 
       const annexPayload = {
-        branch_id: branchId,
-  name: toTitleCaseES(formData.name.trim()),
+        branch_id: finalBranchId,
+        name: toTitleCaseES(formData.name.trim()),
         description: formData.description.trim() || null,
-  address: (formData.address ? toTitleCaseES(formData.address.trim()) : null),
+        address: (formData.address ? toTitleCaseES(formData.address.trim()) : null),
         city_id: finalCityId || null,
         phone: formData.phone.trim() || null,
         email: formData.email.trim() || null,
@@ -378,7 +555,7 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
           oldValues: annexData,
           newValues: annexPayload,
           description: `Anexo actualizado: ${annexPayload.name}`,
-          branchId: branchId,
+          branchId: finalBranchId,
           sendEmail: true
         });
       } else {
@@ -388,7 +565,7 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
           action: 'CREATE',
           newValues: annexPayload,
           description: `Anexo creado: ${annexPayload.name}`,
-          branchId: branchId,
+          branchId: finalBranchId,
           sendEmail: true
         });
       }
@@ -420,10 +597,13 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
     }
     setSelectedStateId('');
     setSelectedCityId('');
+    setSelectedZoneId('');
+    setSelectedBranchId('');
     setStateInput('');
     setCityInput('');
     setIsCreatingNewState(false);
     setIsCreatingNewCity(false);
+    setBranches([]);
   };
 
   const handleDelete = async () => {
@@ -549,12 +729,74 @@ const AnnexFormModal = ({ show, onHide, branchId, annexData = null, onSave }) =>
           </Row>
 
           <Row className="mb-3">
+            <Col md={6}>
+              <Form.Group>
+                <Form.Label>Zona *</Form.Label>
+                <Form.Select 
+                  value={selectedZoneId} 
+                  onChange={handleZoneChange}
+                  disabled={annexData ? (isManager ? true : false) : true}
+                >
+                  <option value="">Seleccione una zona...</option>
+                  {zones.map(zone => (
+                    <option key={zone.zone_id} value={zone.zone_id}>
+                      {zone.name}
+                    </option>
+                  ))}
+                </Form.Select>
+                {!annexData && (
+                  <Form.Text className="text-muted">
+                    Se carga automáticamente desde tu filial
+                  </Form.Text>
+                )}
+                {annexData && isManager && (
+                  <Form.Text className="text-muted">
+                    Los Gestores no pueden cambiar la zona del anexo
+                  </Form.Text>
+                )}
+              </Form.Group>
+            </Col>
+            <Col md={6}>
+              <Form.Group>
+                <Form.Label>{annexData ? 'Filial *' : 'Filial'}</Form.Label>
+                <Form.Select 
+                  value={selectedBranchId} 
+                  onChange={handleBranchChange}
+                  disabled={annexData ? (isManager ? true : false) : true}
+                >
+                  <option value="">Seleccione una filial...</option>
+                  {branches.map(branch => (
+                    <option key={branch.branch_id} value={branch.branch_id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </Form.Select>
+                {!annexData && (
+                  <Form.Text className="text-muted">
+                    Se carga automáticamente desde tu filial
+                  </Form.Text>
+                )}
+                {annexData && !isManager && (
+                  <Form.Text className="text-muted">
+                    Puedes cambiar la filial del anexo
+                  </Form.Text>
+                )}
+                {annexData && isManager && (
+                  <Form.Text className="text-muted">
+                    Los Gestores no pueden cambiar la filial del anexo
+                  </Form.Text>
+                )}
+              </Form.Group>
+            </Col>
+          </Row>
+
+          <Row className="mb-3">
             <Col md={12}>
               <Form.Group>
                 <Form.Label>País *</Form.Label>
                 <Form.Control
                   type="text"
-                  value={countryName || (countries.find(c => c.country_id === selectedCountryId)?.name) || 'Cargando país…'}
+                  value={countryName || 'Cargando...'}
                   readOnly
                   plaintext
                 />

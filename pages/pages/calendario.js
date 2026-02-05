@@ -11,6 +11,7 @@ import esLocale from '@fullcalendar/core/locales/es';
 import { Card, Button, Form, Row, Col, Badge, Spinner, Toast } from 'react-bootstrap';
 import { supabase } from 'lib/supabaseClient';
 import EventModal from 'sub-components/events/EventModal';
+import { useUserPermissions } from 'hooks/useUserPermissions';
 
 const Calendario = () => {
   const router = useRouter();
