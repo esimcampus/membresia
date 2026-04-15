@@ -26,9 +26,13 @@ const EventModal = ({ show, onHide, eventData, branches, userLevel, userBranches
     });
     const [annexes, setAnnexes] = useState([]);
     const [loading, setLoading] = useState(false);
+    const isManager = userLevel === 2;
+    const managerBranchId = isManager && userBranches && userBranches.length > 0 ? userBranches[0] : '';
 
     useEffect(() => {
         if (eventData) {
+            const preselectedBranchId = eventData.branch_id || (isManager && managerBranchId ? managerBranchId : '');
+
             // Modo edición o creación con fecha pre-seleccionada
             setFormData({
                 name: eventData.name || '',
@@ -36,17 +40,29 @@ const EventModal = ({ show, onHide, eventData, branches, userLevel, userBranches
                 event_date: eventData.event_date || '',
                 start_time: eventData.start_time || '',
                 end_time: eventData.end_time || '',
-                branch_id: eventData.branch_id || '',
+                branch_id: preselectedBranchId,
                 annex_id: eventData.annex_id || ''
             });
-            if (eventData.branch_id) {
-                loadAnnexes(eventData.branch_id);
+            if (preselectedBranchId) {
+                loadAnnexes(preselectedBranchId);
             }
         } else {
             // Modo creación sin datos
             resetForm();
         }
-    }, [eventData, show]);
+    }, [eventData, show, isManager, managerBranchId]);
+
+    useEffect(() => {
+        // Si es creación (no edición) y es Gestor, asegurar filial y anexos
+        const isEditing = Boolean(eventData?.event_id);
+        if (!show || isEditing) return;
+        if (isManager && managerBranchId) {
+            if (!formData.branch_id) {
+                setFormData(prev => ({ ...prev, branch_id: managerBranchId, annex_id: '' }));
+            }
+            loadAnnexes(managerBranchId);
+        }
+    }, [show, eventData, isManager, managerBranchId, formData.branch_id]);
 
     const resetForm = () => {
         const newFormData = {
@@ -55,14 +71,14 @@ const EventModal = ({ show, onHide, eventData, branches, userLevel, userBranches
             event_date: '',
             start_time: '',
             end_time: '',
-            // Auto-seleccionar filial del Gestor si solo tiene una asignada
-            branch_id: (userLevel === 2 && userBranches && userBranches.length === 1) ? userBranches[0] : '',
+            // Auto-seleccionar filial del Gestor (usa la primera asignada)
+            branch_id: (userLevel === 2 && userBranches && userBranches.length > 0) ? userBranches[0] : '',
             annex_id: ''
         };
         setFormData(newFormData);
         
-        // Si el Gestor tiene una sola filial, cargar sus anexos automáticamente
-        if (userLevel === 2 && userBranches && userBranches.length === 1) {
+        // Si el Gestor tiene filial asignada, cargar sus anexos automáticamente
+        if (userLevel === 2 && userBranches && userBranches.length > 0) {
             loadAnnexes(userBranches[0]);
             console.log('✅ Gestor: Filial y anexos auto-seleccionados');
         } else {
@@ -438,7 +454,7 @@ const EventModal = ({ show, onHide, eventData, branches, userLevel, userBranches
                                     name="annex_id"
                                     value={formData.annex_id}
                                     onChange={handleChange}
-                                    disabled={!formData.branch_id}
+                                    disabled={!formData.branch_id && !managerBranchId}
                                 >
                                     <option value="">Toda la filial</option>
                                     {annexes.map(annex => (
